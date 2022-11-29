@@ -11,6 +11,7 @@ JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 TextEncodeBase = "f92c20c0-9f2a-4705-8116-881385faba05"
 
 [compat]
+BytePairEncoding = "0.3"
 julia = "1"
 
 [extras]
