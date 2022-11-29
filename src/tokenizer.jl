@@ -16,6 +16,8 @@ const GPT_BPE = BPE(joinpath(ARTIFACT_DIR, "bpe.txt"))
 const GPT_CODEMAP = gpt2_codemap()
 const GPT_TOKENIZER = FlatTokenizer(CodeNormalizer(BPETokenization(GPT2Tokenization(), GPT_BPE), GPT_CODEMAP))
 
+const GPT_EOT_ID = 50256
+
 "Encodes a sequence of GPT-2 / GPT-3 tokens into integer token IDs."
 function encode(tokens::AbstractVector{<:AbstractString})
     return map(t -> GPT_VOCAB_DICT[t]::Int, tokens)

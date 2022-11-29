@@ -72,10 +72,10 @@ get_gen_fn(trace::GPT3Trace) = trace.gen_fn
 
 """
     GPT3GenerativeFunction(;
-        model = "text-davinci-002"
-        temperature = 1.0
-        max_tokens = 1024
-        stop = nothing
+        model = "text-davinci-002",
+        temperature = 1.0,
+        max_tokens = 1024,
+        stop = nothing,
         api_key_lookup = () -> ENV["OPENAI_API_KEY"]
     )
 
@@ -91,9 +91,9 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
 - `model::String`:
     The pretrained model to query. Defaults to `"text-davinci-002"`.
 - `temperature::Float64 = 1.0`:
-    The softmax temperature. Higher temperatures increase randomness. Note that
-    if this is not set to `1.0`, then the resulting log probabilities will
-    no longer be normalized.
+    The softmax temperature. Values between `0.0`` and `2.0` are allowed.
+    Higher temperatures increase randomness. Note that if this is not set
+    to `1.0`, then the resulting log probabilities will no longer be normalized.
 - `max_tokens::Int = 1024`:
     The maximum number of output tokens generated (including the stop sequence).
 - `stop::Union{String,Nothing} = nothing`:
@@ -134,7 +134,7 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     prompt = args[1]
 
     # Prevent <|endoftext|> from being generated when using custom stop tokens
-    logit_bias = isnothing(gen_fn.stop) ? nothing : Dict("50256" => -100)
+    logit_bias = isnothing(gen_fn.stop) ? nothing : Dict(GPT_EOT_ID => -100)
     # Call GPT3 API and extract text completion
     response = gpt3_api_call(
         prompt;
@@ -185,7 +185,7 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
         if isnothing(gen_fn.stop)
             # Convert to token IDs, append <|endoftext|>
             prompt_tokens = id_tokenize(prompt)
-            full_text = append!(prompt_tokens, output_tokens, 50256)
+            full_text = append!(prompt_tokens, output_tokens, GPT_EOT_ID)
         else
             # Append stop sequence to text
             full_text = prompt * output * gen_fn.stop
@@ -199,7 +199,7 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
     end
 
     # Prevent <|endoftext|> from being generated when using custom stop tokens
-    logit_bias = isnothing(gen_fn.stop) ? nothing : Dict("50256" => -100)
+    logit_bias = isnothing(gen_fn.stop) ? nothing : Dict(GPT_EOT_ID => -100)
     # Call GPT3 API to evaluate log probabilities
     response = gpt3_api_call(
         full_text::Union{String, Vector{Int}},
