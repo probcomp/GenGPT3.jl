@@ -67,6 +67,9 @@ The generative function takes in a prompt as an (optional) argument, then sample
 - `api_key_lookup::Function`:
     A zero-argument function that returns the OpenAI API key. Defaults to
     looking up the `"OPENAI_API_KEY"` environment variable.
+- `organization_lookup::Function`:
+    A zero-argument function that returns the OpenAI organization ID to use.
+    Defaults to the `"OPENAI_ORGANIZATION"` environment variable, if specified.
 
 ## Utilities
 

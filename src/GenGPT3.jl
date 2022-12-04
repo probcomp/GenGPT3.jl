@@ -101,8 +101,11 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     specified. If specified, then the model will be prevented from generating
     any `<|endoftext|>` tokens (to avoid multiple termination possibilities).
 - `api_key_lookup::Function`:
-    A zero-argument function that returns the OpenAI API key. Defaults to
+    A zero-argument function that returns the OpenAI API key to use. Defaults to
     looking up the `"OPENAI_API_KEY"` environment variable.
+- `organization_lookup::Function`:
+    A zero-argument function that returns the OpenAI organization ID to use.
+    Defaults to the `"OPENAI_ORGANIZATION"` environment variable, if specified.
 """
 @kwdef struct GPT3GenerativeFunction <: GenerativeFunction{String,GPT3Trace}
     model::String = "text-davinci-002"
@@ -111,6 +114,7 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     stop::Union{String,Nothing} = nothing
     n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
     api_key_lookup::Function = lookup_openai_api_key
+    organization_lookup::Function = lookup_openai_organization
 end
 
 """
@@ -144,7 +148,8 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
         max_tokens=gen_fn.max_tokens,
         stop=gen_fn.stop,
         logit_bias=logit_bias,
-        api_key=gen_fn.api_key_lookup()
+        api_key=gen_fn.api_key_lookup(),
+        organization=gen_fn.organization_lookup()
     )
     completion = response.choices[1]
     output = completion.text
@@ -210,7 +215,8 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
         echo=true,
         stop=gen_fn.stop,
         logit_bias=logit_bias,
-        api_key=gen_fn.api_key_lookup()
+        api_key=gen_fn.api_key_lookup(),
+        organization=gen_fn.organization_lookup()
     )
     completion = response.choices[1]
 

@@ -1,11 +1,19 @@
 ## GPT-3 API and utilities ##
 
+"Return API key stored in the OPENAI_API_KEY environment variable."
+lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
+
+"Return organization ID stored in the OPENAI_ORGANIZATION environment variable."
+lookup_openai_organization() = get(ENV, "OPENAI_ORGANIZATION", "")
+
 "Call the OpenAI JSON API for GPT-3 and return the results."
 function gpt3_api_call(
     prompt, n_completions::Int=1;
     endpoint::String = "https://api.openai.com/v1/completions",
-    api_key::String = get(ENV, "OPENAI_API_KEY", ""),
-    model::String = "text-davinci-002",
+    api_key::String = lookup_openai_api_key(),
+    organization::String = lookup_openai_organization(),
+    n_retries::Int = 10,
+    model::String = "text-davinci-003",
     temperature::Real = 1.0,
     max_tokens::Int = 1024,
     logprobs::Union{Nothing,Int} = 0,
@@ -15,9 +23,11 @@ function gpt3_api_call(
     logit_bias::Union{Dict,Nothing} = nothing,
     options... # Other options
 )
+    # Construct HTTP request headers and body
     headers = ["Content-Type" => "application/json",
-               "Authorization" => "Bearer $api_key"]
-    data = Dict{String,Any}(
+               "Authorization" => "Bearer $api_key",
+               "OpenAI-Organization" => organization]
+    body = Dict{String,Any}(
         "prompt" => prompt,
         "n" => n_completions,
         "model" => model,
@@ -29,16 +39,63 @@ function gpt3_api_call(
         options...
     )
     if !isnothing(logit_bias)
-        data["logit_bias"] = logit_bias
+        body["logit_bias"] = logit_bias
     end
-    data = JSON3.write(data)
+    body = JSON3.write(body)
+    # Post request with exponential backoff
     if verbose println("Posting HTTP request...") end
-    response = HTTP.post(endpoint, headers, data)
+    delays = ExponentialBackOff(n=n_retries, first_delay=0.5, max_delay=60.0,
+                                factor=2.0, jitter=0.1)
+    request = Base.retry(delays=delays,
+                         check=(_, e) -> HTTP.RetryRequest.isrecoverable(e)) do
+        HTTP.post(endpoint, headers, body, retry=false)
+    end
+    response = request()
     return JSON3.read(response.body)
 end
 
-"Return API key stored in the OPENAI_API_KEY environment variable."
-lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
+"Make batched requests to the OpenAI API to reach prompt quota."
+function gpt3_multi_prompt_api_call(
+    prompts::AbstractVector{<:Union{AbstractString, AbstractVector{Int}}};
+    batch_size::Int=10, verbose::Bool=false, options...
+)
+    n_remaining = length(prompts)
+    choices = JSON3.Object[]
+    for batch in Iterators.partition(prompts, batch_size)
+        n_request = length(batch)
+        n_remaining -= n_request
+        if verbose
+            println("Making $n_request requests ($n_remaining remaining)...")
+        end
+        response = gpt3_api_call(batch; verbose=verbose, options...)
+        n_received = length(choices)
+        resize!(choices, n_received + n_request)
+        for choice in response.choices
+            idx = n_received + choice.index + 1
+            choices[idx] = choice
+        end
+    end
+    return choices
+end
+
+"Make batched requests to the OpenAI API to reach completion quota."
+function gpt3_multi_completion_api_call(
+    prompt::Union{AbstractString, AbstractVector{Int}}, n_completions::Int;
+    batch_size::Int=10, verbose::Bool=false, options...
+)
+    n_remaining = n_completions
+    choices = JSON3.Object[]
+    while n_remaining > 0
+        n_request = min(n_remaining, batch_size)
+        n_remaining -= n_request
+        if verbose
+            println("Making $n_request requests ($n_remaining remaining)...")
+        end
+        response = gpt3_api_call(prompt, n_request; verbose=verbose, options...)
+        append!(choices, response.choices)
+    end
+    return choices
+end
 
 "Find the index of the completion's first token when a prompt is echoed."
 function find_start_index(completion, prompt::String)
