@@ -44,6 +44,7 @@ GPT3GenerativeFunction(;
     max_tokens = 1024,
     stop = nothing,
     api_key_lookup = () -> ENV["OPENAI_API_KEY"],
+    organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
 )
 ```
 

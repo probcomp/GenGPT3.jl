@@ -1,5 +1,7 @@
 ## GPT-3 API and utilities ##
 
+const NO_EOT_BIAS = Dict(GPT_EOT_ID => -100)
+
 "Return API key stored in the OPENAI_API_KEY environment variable."
 lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
 
@@ -57,7 +59,9 @@ end
 "Make batched requests to the OpenAI API to reach prompt quota."
 function gpt3_multi_prompt_api_call(
     prompts::AbstractVector{<:Union{AbstractString, AbstractVector{Int}}};
-    batch_size::Int=10, verbose::Bool=false, options...
+    batch_size::Int=min(length(prompts), 16),
+    verbose::Bool=false,
+    options...
 )
     n_remaining = length(prompts)
     choices = JSON3.Object[]
@@ -81,7 +85,8 @@ end
 "Make batched requests to the OpenAI API to reach completion quota."
 function gpt3_multi_completion_api_call(
     prompt::Union{AbstractString, AbstractVector{Int}}, n_completions::Int;
-    batch_size::Int=10, verbose::Bool=false, options...
+    batch_size::Int=min(n_completions, 16),
+    verbose::Bool=false, options...
 )
     n_remaining = n_completions
     choices = JSON3.Object[]
@@ -115,4 +120,53 @@ function find_stop_index(completion, n_stop_tokens::Int=1)
         last_stop_idx = first_stop_idx + n_stop_tokens - 1
         return last_stop_idx
     end
+end
+
+"Extract tokens and logprobs from completion up to stop token."
+function extract_tokens_until_stop(completion, n_stop_tokens::Int=1)
+    stop_idx = find_stop_index(completion, n_stop_tokens)
+    tokens = completion.logprobs.tokens[1:stop_idx]
+    logprobs = completion.logprobs.token_logprobs[1:stop_idx]
+    return tokens, logprobs
+end
+
+"Extract tokens and logprobs from completion after prompt."
+function extract_tokens_after_prompt(completion, prompt::String)
+    start_idx = find_start_index(completion, prompt)
+    tokens = completion.logprobs.tokens[start_idx:end]
+    logprobs = completion.logprobs.token_logprobs[start_idx:end]
+    return tokens, collect(Float64, logprobs)
+end
+
+"""
+Construct full text from prompt and completion output, appending stop sequence
+and converting to token IDs if necessary. Returns nothing if the output (plus 
+stop sequence) exceeds the maximum allowed number of tokens.
+"""
+function construct_full_text(
+    max_tokens::Int, 
+    prompt::String,
+    output::String,
+    stop::Union{String,Nothing},
+    n_stop_tokens::Int = isnothing(stop) ? 1 : length(tokenize(stop))
+)
+    output_ids = id_tokenize(output)
+    n_output_tokens = length(output_ids)
+    if n_output_tokens + n_stop_tokens <= max_tokens # Finish due to stop words
+        # Construct full text from prompt, output, and stop sequence
+        if isnothing(stop)
+            # Convert to token IDs, append <|endoftext|>
+            prompt_ids = id_tokenize(prompt)
+            full_text = append!(prompt_ids, output_ids, GPT_EOT_ID)
+        else
+            # Append stop sequence to text
+            full_text = prompt * output * stop
+        end
+    elseif n_output_tokens == max_tokens # Finish due to length
+        # Construct full text from prompt and output
+        full_text = prompt * output
+    else # Full text could not have been generated
+        full_text = nothing
+    end
+    return full_text
 end

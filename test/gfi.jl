@@ -102,7 +102,7 @@ end
         # Regenerate output
         new_trace, weight, retdiff = 
             regenerate(trace, get_args(trace), (NoChange(),), select(:output))
-        @test weight == get_score(new_trace) - get_score(trace)
+        @test weight == 0.0
         @test retdiff isa UnknownChange
 
         # Adjust prompt
