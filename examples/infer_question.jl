@@ -15,7 +15,7 @@ gpt3 = GPT3GF(max_tokens=64)
         "Which mountain do the Greek gods live upon?",
         "What is the tallest mountain in Greece?",
     ])
-    prompt = question * "\n\n"
+    prompt = question * "\r\n\r\n"
     answer ~ gpt3(prompt)
     return (question, answer)
 end
@@ -31,7 +31,7 @@ function print_probs(traces, weights)
         probs[question] = p + exp(w)
     end
     for (qn, p) in probs
-        print("Question: ")
+        print("Q: ")
         show(qn)
         println()
         println("Probability: ", round(p, digits=2))
@@ -61,21 +61,28 @@ print_probs(traces, weights)
 
 ## Define a model with a more general question prior
 
+gpt3q = GPT3GF(max_tokens=64, stop="\r\n")
+gpt3a = GPT3GF(max_tokens=64, stop=nothing)
+
 "Sample a question and an answer according to GPT-3."
 @gen function qa_model()
-    question ~ gpt3("Question:")
-    prompt = question * "\n\nAnswer:\n\n"
-    answer ~ gpt3(prompt)
+    question ~ gpt3q("Question:\r\n\r\n")
+    prompt = question * "\r\n\r\nAnswer:\r\n\r\n"
+    answer ~ gpt3a(prompt)
     return (question, answer)
 end
 
 ## Define a targeted proposal to sample likely questions given answers
 
-"Sample a likely question given answer."
+"Propose a likely question, given the answer."
 @gen function qa_proposal(answer::String)
-    prompt = ("Consider the following answer to a question:\n\n" * answer *
-              "\n\nWhat question could have led to this answer?")
-    question ~ gpt3(prompt)
+    prompt = (
+        "Consider the following answer to a question:" *
+        "\r\n\r\n" * answer * "\r\n\r\n" * 
+        "What question could have led to this answer?" *
+        "\r\n\r\n"
+    )
+    question ~ gpt3q(prompt)
     return question
 end
 
