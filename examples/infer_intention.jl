@@ -1,6 +1,6 @@
 using Gen, GenGPT3
 
-## Define a model that samples an intention, then an instruction 
+## Define a model that samples an intention, then an utterance
 
 "Samples a label uniformly at random."
 @dist labeled_uniform(labels) =
@@ -8,29 +8,27 @@ using Gen, GenGPT3
 
 examples = """
 Intention: (buy french-fries 1)
-Instruction: I would like one order of french fries.
+Utterance: I would like one order of french fries.
 Intention: (buy lollipop 2)
-Instruction: Could I have two lollipops please?
+Utterance: Could I have two lollipops please?
 Intention: (buy coca-cola 3)
-Instruction: Get me 3 cups of coke.
+Utterance: Get me 3 cups of coke.
 """
 
 gpt3 = GPT3GF(max_tokens=64, stop="\nIntention:")
 
-"Sample an intention from a fixed set, then a natural language instruction."
-@gen function instruction_model()
+"Sample an intention from a fixed set, then a natural language utterance."
+@gen function intention_model()
     intention ~ labeled_uniform([
         "(buy ice-cream 1)",
         "(buy ice-cream 2)",
         "(buy pizza 1)",
         "(buy pizza 2)"
     ])
-    prompt = examples * "Intention: " * intention * "\nInstruction:"
-    instruction ~ gpt3(prompt)
-    return (intention, instruction)
+    prompt = examples * "Intention: " * intention * "\nUtterance:"
+    utterance ~ gpt3(prompt)
+    return (intention, utterance)
 end
-
-instruction_model()
 
 ## Infer intentions given an instruction
 
@@ -49,23 +47,23 @@ function print_probs(traces, weights)
     end    
 end
 
-instruction = " Get me two pizzas, pronto."
-observations = choicemap((:instruction => :output, instruction))
+utterance = " Get me two pizzas, pronto."
+observations = choicemap((:utterance => :output, utterance))
 traces, weights = importance_sampling(
-    instruction_model, (), observations, 20
+    intention_model, (), observations, 20
 )
 print_probs(traces, weights)
 
-instruction = " I want some ice cream to share."
-observations = choicemap((:instruction => :output, instruction))
+utterance = " I want vanilla ice cream."
+observations = choicemap((:utterance => :output, utterance))
 traces, weights = importance_sampling(
-    instruction_model, (), observations, 20
+    intention_model, (), observations, 20
 )
 print_probs(traces, weights)
 
-instruction = " I'm looking for something savory."
-observations = choicemap((:instruction => :output, instruction))
+utterance = " I'm looking for something savory."
+observations = choicemap((:utterance => :output, utterance))
 traces, weights = importance_sampling(
-    instruction_model, (), observations, 20
+    intention_model, (), observations, 20
 )
 print_probs(traces, weights)
