@@ -9,7 +9,7 @@ import TextEncodeBase: FlatTokenizer, CodeNormalizer, Sentence, codeunmap
 
 const ARTIFACT_DIR = normpath(dirname(@__DIR__), "artifacts")
 
-const GPT_VOCAB_DICT = JSON3.read(read("artifacts/vocab.json", String))
+const GPT_VOCAB_DICT = JSON3.read(read(joinpath(ARTIFACT_DIR, "vocab.json"), String))
 const GPT_VOCAB_LIST = [string(s) for s in keys(GPT_VOCAB_DICT)]
 
 const GPT_BPE = BPE(joinpath(ARTIFACT_DIR, "bpe.txt"))
