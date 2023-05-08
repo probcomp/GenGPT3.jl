@@ -11,6 +11,9 @@ An alias for the static choicemap associated with [`GPT3Trace`](@ref).
 
 Constructs a static choicemap for the trace of a [`GPT3GenerativeFunction`](@ref).
 """
+const GPT3ChoiceMap =
+    Gen.StaticChoiceMap{(OUTPUT_ADDR,), Tuple{String}, (), Tuple{}}
+
 GPT3ChoiceMap(output::String) =
     Gen.StaticChoiceMap(NamedTuple{(OUTPUT_ADDR,)}((output,)), NamedTuple(), false)
 

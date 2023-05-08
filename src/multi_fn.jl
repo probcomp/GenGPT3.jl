@@ -9,6 +9,8 @@ An alias for the choicemap associated with [`MultiGPT3Trace`](@ref).
 
 Constructs a choicemap for the trace of a [`MultiGPT3GenerativeFunction`](@ref).
 """
+const MultiGPT3ChoiceMap = Gen.InternalVectorChoiceMap{GPT3ChoiceMap}
+
 MultiGPT3ChoiceMap(outputs::AbstractVector{String}) =
     Gen.InternalVectorChoiceMap(GPT3ChoiceMap.(outputs), isempty(outputs))
 
@@ -30,6 +32,11 @@ struct MultiGPT3Trace{T <: GenerativeFunction} <: Trace
     score::Float64
 end
 
+function MultiGPT3Trace(gen_fn::GenerativeFunction)
+    return MultiGPT3Trace(gen_fn, String[], String[], Vector{String}[], 
+                          Vector{Float64}[], Float64[], 0.0)
+end
+
 get_choices(trace::MultiGPT3Trace) = MultiGPT3ChoiceMap(trace.outputs)
 get_args(trace::MultiGPT3Trace) = (trace.prompts,)
 get_retval(trace::MultiGPT3Trace) = trace.outputs
@@ -46,6 +53,18 @@ function Base.:(==)(trace1::MultiGPT3Trace, trace2::MultiGPT3Trace)
             trace1.logprobs == trace2.logprobs &&
             trace1.scores == trace2.scores &&
             trace1.score == trace2.score)
+end
+
+function Base.vcat(trace1::MultiGPT3Trace, trace2::MultiGPT3Trace)
+    return MultiGPT3Trace(
+        trace1.gen_fn,
+        vcat(trace1.prompts, trace2.prompts),
+        vcat(trace1.outputs, trace2.outputs),
+        vcat(trace1.tokens, trace2.tokens),
+        vcat(trace1.logprobs, trace2.logprobs),
+        vcat(trace1.scores, trace2.scores),
+        trace1.score + trace2.score
+    )
 end
 
 ## MultiGPT3GenerativeFunction ##

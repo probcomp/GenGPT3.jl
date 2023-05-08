@@ -153,8 +153,14 @@ function construct_full_text(
             full_text = prompt * output * stop
         end
     elseif n_output_tokens == max_tokens # Finish due to length
-        # Construct full text from prompt and output
-        full_text = prompt * output
+        if isnothing(stop)
+            # Convert to token IDs
+            prompt_ids = id_tokenize(prompt)
+            full_text = append!(prompt_ids, output_ids)
+        else
+            # Construct full text from prompt and output
+            full_text = prompt * output
+        end
     else # Full text could not have been generated
         full_text = nothing
     end
