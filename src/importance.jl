@@ -23,6 +23,15 @@ Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref).
 const GPT3ISChosenChoiceMap =
     Gen.StaticChoiceMap{(:chosen), Tuple{Int}, (), Tuple{}}
 
+"""
+    GPT3ISChosenRegenChoiceMap
+
+Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref).
+When used with `update`, the output is regenerated from the chosen index.
+"""
+const GPT3ISChosenRegenChoiceMap = 
+    Gen.StaticChoiceMap{(OUTPUT_ADDR, :chosen), Tuple{Nothing, Int}, (), Tuple{}}
+
 ## GPT3ImportanceSamplerTrace ##
 
 """
@@ -100,7 +109,8 @@ proposal.
 After `n_samples` samples are drawn from the proposal, the model is used to 
 score each sample, and importance weights are computed. A single sample is then
 chosen according to the importance weights, which is returned as the output of
-the generative function.
+the generative function. Both the `output` and `chosen` index are part of the
+trace's choicemap.
 """
 @kwdef struct GPT3ImportanceSampler{V} <: GenerativeFunction{String,GPT3ISTrace}
     model_gf::MultiGPT3GF = MultiGPT3GF()
@@ -130,18 +140,19 @@ function simulate(gen_fn::GPT3IS{Nothing}, args::Tuple)
         error("Expected 2 or 3 arguments to GPT3ImportanceSampler")
     end
     # Sample and score completions
-    prop_trace = simulate(gen_fn.proposal_gf, (proposal_prompt, n_samples))
+    prop_trace = simulate(gen_fn.proposal_gf, (n_samples, proposal_prompt))
     if gen_fn.model_gf === gen_fn.proposal_gf && model_prompt == proposal_prompt
         model_trace = prop_trace
     else
         prop_choices = get_choices(prop_trace)
         model_trace, _ =
-            generate(gen_fn.model_gf, (model_prompt, n_samples), prop_choices)
+            generate(gen_fn.model_gf, (n_samples, model_prompt), prop_choices)
     end
     # Compute importance weights and normalizing constant
     valid = trues(n_samples)
     log_weights = model_trace.scores .- prop_trace.scores
-    log_z_est = logsumexp(log_weights) - log(n_samples)
+    log_sum_weights = logsumexp(log_weights)
+    log_z_est = log_sum_weights - log(n_samples)
     # Resample according to importance weights
     chosen_idx = randboltzmann(1:n_samples, log_weights)
     # Select output etc. from model trace
@@ -150,7 +161,7 @@ function simulate(gen_fn::GPT3IS{Nothing}, args::Tuple)
     logprobs = model_trace.logprobs[chosen_idx]
     model_score = model_trace.scores[chosen_idx]
     # Compute score and construct trace
-    score = model_score - log_z_est
+    score = model_score - log_sum_weights
     trace = GPT3ISTrace(
         gen_fn, n_samples, model_prompt, proposal_prompt,
         model_trace, prop_trace, valid, log_weights, log_z_est,
@@ -192,20 +203,18 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
     end
     # Compute importance weights and normalizing constant
     log_weights = model_trace.scores .- prop_trace.scores
-    valid_log_weights = log_weights[valid][1:end-1]
-    log_z_est = logsumexp(valid_log_weights) - log(n_trials - 1)
+    valid_log_weights = resize!(log_weights .* valid, n_trials - 1)
+    log_sum_weights = logsumexp(valid_log_weights)
+    log_z_est = log_sum_weights - log(n_trials - 1)
     # Resample according to importance weights
-    @assert length(valid_log_weights) == n_samples
-    chosen_idx = randboltzmann(1:n_samples, valid_log_weights)
+    chosen_idx = randboltzmann(1:(n_trials-1), valid_log_weights)
     # Select output etc. from model trace
-    valid_idxs = findall(valid)
-    chosen_idx = valid_idxs[chosen_idx]
     output = model_trace.outputs[chosen_idx]
     tokens = model_trace.tokens[chosen_idx]
     logprobs = model_trace.logprobs[chosen_idx]
     model_score = model_trace.scores[chosen_idx]
     # Compute score and construct trace
-    score = model_score - log_z_est
+    score = model_score - log_sum_weights
     trace = GPT3ISTrace(
         gen_fn, n_samples, model_prompt, proposal_prompt,
         model_trace, prop_trace, valid, log_weights, log_z_est,
@@ -242,7 +251,7 @@ function generate(gen_fn::GPT3IS, args::Tuple, constraints::GPT3ISChosenChoiceMa
     new_trace = GPT3ISTrace(
         trace.gen_fn, trace.n_samples,
         trace.model_prompt, trace.proposal_prompt,
-        trace.model_trace, trace.prop_trace, trace.valid,
+        trace.model_trace, trace.proposal_trace, trace.valid,
         trace.log_weights, trace.log_z_est,
         chosen_idx, output, tokens, logprobs, model_score, score
     )
@@ -259,10 +268,149 @@ function generate(gen_fn::GPT3IS, args::Tuple, constraints::GPT3ISChosenChoiceMa
 end
 
 # Nothing is constrained
-function generate(gen_fn::GPT3IS, args::Tuple, ::EmptyChoiceMap)
-    trace = simulate(gen_fn, args)
-    return trace, 0.0
+generate(gen_fn::GPT3IS, args::Tuple, ::EmptyChoiceMap) =
+    simulate(gen_fn, args), 0.0
+
+generate(gen_fn::GPT3IS, args::Tuple, ::StaticSelection) =
+    error("`generate`` not implemented for this set of constraints.")
+
+function project(trace::GPT3ISTrace, selection::Selection)
+    if OUTPUT_ADDR in selection && !(:chosen in selection)
+        return trace.model_score - trace.log_z_est
+    elseif :chosen in selection && !(OUTPUT_ADDR in selection)
+        chosen_weight = trace.log_weights[trace.chosen_idx]
+        if isnothing(trace.gen_fn.validator) # Standard importance sampling
+            log_sum_weights = trace.log_z_est + log(trace.n_samples)
+        else # Alive importance sampling
+            log_sum_weights = trace.log_z_est + log(length(trace.valid) - 1)
+        end
+        return chosen_weight - log_sum_weights
+    elseif OUTPUT_ADDR in selection && :chosen in selection
+        return trace.score
+    else
+        return 0.0
+    end
 end
+
+project(trace::GPT3ISTrace, selection::AllSelection) = trace.score
+
+project(trace::GPT3ISTrace, selection::EmptySelection) = 0.0
+
+function update(trace::GPT3ISTrace, args::Tuple, argdiffs::Tuple,
+                constraints::ChoiceMap)
+    # Compute argdiffs
+    if get_args(trace) == args
+        argdiffs = (NoChange(), NoChange(), NoChange())
+    end    
+    # Dispatch to `update` implementations for specific constraints
+    if isempty(constraints)
+        return update(trace, args, argdiffs, EmptyChoiceMap())
+    end
+    if argdiffs isa NTuple{3, NoChange}
+        return update(trace, args, argdiffs, StaticChoiceMap(constraints))
+    end
+    # Default to calling `generate`
+    new_trace, _ = generate(trace.gen_fn, args, constraints)
+    up_weight = get_score(new_trace) - get_score(trace)
+    discard = choicemap()
+    for (key, val) in get_values_shallow(constraints)
+        if key in (OUTPUT_ADDR, :chosen)
+            discard[key] = val
+        end
+    end
+    return new_trace, up_weight, UnknownChange(), discard
+end
+
+# Chosen index is updated, output is regenerated accordingly
+function update(trace::GPT3ISTrace, args::Tuple, ::NTuple{3, NoChange},
+                constraints::GPT3ISChosenRegenChoiceMap)
+    # Select output etc. from model trace
+    chosen_idx = get_value(constraints, :chosen)
+    output = trace.model_trace.outputs[chosen_idx]
+    tokens = trace.model_trace.tokens[chosen_idx]
+    logprobs = trace.model_trace.logprobs[chosen_idx]
+    model_score = trace.model_trace.scores[chosen_idx]
+    if isnothing(trace.gen_fn.validator)
+        is_valid = trace.valid[chosen_idx]
+    else # Alive importance sampling forbids sampling final completion
+        is_valid = trace.valid[chosen_idx] && chosen_idx < length(trace.valid)
+    end
+    # Compute score and construct trace
+    score = is_valid ? model_score - trace.log_z_est : -Inf
+    new_trace = GPT3ISTrace(
+        trace.gen_fn, trace.n_samples,
+        trace.model_prompt, trace.proposal_prompt,
+        trace.model_trace, trace.proposal_trace, trace.valid,
+        trace.log_weights, trace.log_z_est,
+        chosen_idx, output, tokens, logprobs, model_score, score
+    )
+    # Compute weight update
+    up_weight = score - trace.score
+    discard = choicemap(:chosen => trace.chosen_idx)
+    return new_trace, up_weight, UnknownChange(), discard
+end
+
+# Nothing is updated, no arguments changed
+update(trace::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange}, ::EmptyChoiceMap) =
+    trace, 0.0, NoChange(), EmptyChoiceMap()
+
+update(trace::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange}, ::StaticChoiceMap) =
+    error("`update`` not implemented for this set of constraints.")
+
+function regenerate(trace::GPT3ISTrace, args::Tuple, argdiffs::Tuple,
+                    selection::Selection)
+    # Compute argdiffs
+    if get_args(trace) == args
+        argdiffs = (NoChange(), NoChange(), NoChange())
+    end
+    # Dispatch to `regenerate` implementations for specific selections
+    if isempty(selection)
+        return regenerate(trace, args, argdiffs, EmptySelection())
+    end
+    return regenerate(trace, args, argdiffs, StaticSelection(selection))
+end
+
+# Both chosen index and output are selected, no arguments changed
+function regenerate(trace::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange},
+                    selection::StaticSelection{(OUTPUT_ADDR, :chosen)})
+    # Resample chosen index according to importance weights
+    if isnothing(trace.gen_fn.validator)
+        chosen_idx = randboltzmann(1:trace.n_samples, trace.log_weights)
+    else
+        n_trials = length(trace.valid)
+        valid_log_weights = resize!(trace.log_weights .* trace.valid, n_trials - 1)
+        chosen_idx = randboltzmann(1:(n_trials-1), valid_log_weights)
+    end
+    # Select output etc. from model trace
+    output = trace.model_trace.outputs[chosen_idx]
+    tokens = trace.model_trace.tokens[chosen_idx]
+    logprobs = trace.model_trace.logprobs[chosen_idx]
+    model_score = trace.model_trace.scores[chosen_idx]
+    # Compute score and construct trace
+    score = model_score - trace.log_z_est
+    new_trace = GPT3ISTrace(
+        trace.gen_fn, trace.n_samples,
+        trace.model_prompt, trace.proposal_prompt,
+        trace.model_trace, trace.proposal_trace, trace.valid,
+        trace.log_weights, trace.log_z_est,
+        chosen_idx, output, tokens, logprobs, model_score, score
+    )
+    return new_trace, 0.0, UnknownChange()
+end
+
+# Everything is selected
+regenerate(trace::GPT3ISTrace, args::Tuple, argdiffs::Tuple, ::AllSelection) =
+    (simulate(trace.gen_fn, args), 0.0, UnknownChange())
+
+# Nothing is selected, no arguments changed
+regenerate(trace::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange}, ::EmptySelection) =
+    trace, 0.0, NoChange()
+
+regenerate(::GPT3ISTrace, ::Tuple, ::Tuple, ::StaticSelection) =
+    error("`regenerate` not implemented for this selection.")
+
+regenerate(::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange}, ::StaticSelection) =
+    error("`regenerate` not implemented for this selection.")
 
 "Sample from the standard Gumbel distribution."
 function randgumbel()
