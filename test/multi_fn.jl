@@ -34,7 +34,7 @@ end
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
 
-        trace = Gen.simulate(multi_gpt3, (prompts[1], 2))
+        trace = Gen.simulate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
@@ -54,7 +54,7 @@ end
         @test trace.score == sum(trace.scores)
         @test weight == 0.0
 
-        trace, weight = Gen.generate(multi_gpt3, (prompts[1], 2))
+        trace, weight = Gen.generate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
@@ -76,7 +76,7 @@ end
         @test new_weight == new_trace.score
 
         new_trace, new_weight =
-            Gen.generate(multi_gpt3, (prompts[1], 2), constraints)
+            Gen.generate(multi_gpt3, (2, prompts[1]), constraints)
         @test new_trace.prompts == trace.prompts
         @test new_trace.outputs == trace.outputs
         @test new_trace.tokens == trace.tokens

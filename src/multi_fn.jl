@@ -142,8 +142,8 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     return trace
 end
 
-simulate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}) =
-    simulate(gen_fn, (fill(args[1], args[2]),))
+simulate(gen_fn::MultiGPT3GF, args::Tuple{Int, String}) =
+    simulate(gen_fn, (fill(args[2], args[1]),))
 
 function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     # Check whether any outputs are constrained
@@ -234,13 +234,13 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     return trace, weight
 end
 
-generate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}, constraints::ChoiceMap) =
-    generate(gen_fn, (fill(args[1], args[2]),), constraints)
+generate(gen_fn::MultiGPT3GF, args::Tuple{Int, String}, constraints::ChoiceMap) =
+    generate(gen_fn, (fill(args[2], args[1]),), constraints)
 
 generate(gen_fn::MultiGPT3GF, args::Tuple, ::EmptyChoiceMap) =
     simulate(gen_fn, args), 0.0
 
-generate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}, ::EmptyChoiceMap) =
+generate(gen_fn::MultiGPT3GF, args::Tuple{Int, String}, ::EmptyChoiceMap) =
     simulate(gen_fn, args), 0.0
 
 function project(trace::MultiGPT3Trace, selection::Selection)
