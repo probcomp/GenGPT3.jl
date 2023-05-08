@@ -104,35 +104,25 @@ end
 
 "Find the index of the completion's first token when a prompt is echoed."
 function find_start_index(completion, prompt::String)
-    text_offsets = completion.logprobs.text_offset  
-    start_idx = findfirst(==(length(prompt)), text_offsets)
-    return start_idx
-end
-
-"Find the index of a completion's last token, including the stop sequence."
-function find_stop_index(completion, n_stop_tokens::Int=1)
-    if completion.finish_reason == "length"
-        return length(completion.logprobs.tokens)
-    elseif completion.finish_reason == "stop"
-        text_offsets = completion.logprobs.text_offset  
-        last_offset = text_offsets[end]
-        first_stop_idx = findfirst(==(last_offset), text_offsets)
-        last_stop_idx = first_stop_idx + n_stop_tokens - 1
-        return last_stop_idx
+    text_offsets = completion.logprobs.text_offset
+    if isempty(text_offsets)
+        return 0
+    else
+        start_idx = findfirst(==(length(prompt)), text_offsets)
+        return start_idx
     end
-end
-
-"Extract tokens and logprobs from completion up to stop token."
-function extract_tokens_until_stop(completion, n_stop_tokens::Int=1)
-    stop_idx = find_stop_index(completion, n_stop_tokens)
-    tokens = completion.logprobs.tokens[1:stop_idx]
-    logprobs = completion.logprobs.token_logprobs[1:stop_idx]
-    return tokens, logprobs
 end
 
 "Extract tokens and logprobs from completion after prompt."
 function extract_tokens_after_prompt(completion, prompt::String)
     start_idx = find_start_index(completion, prompt)
+    if start_idx > length(completion.logprobs.tokens) || start_idx == 0
+        return String[], Float64[]
+    else
+        tokens = completion.logprobs.tokens[start_idx:end]
+        logprobs = completion.logprobs.token_logprobs[start_idx:end]
+        return tokens, logprobs
+    end
     tokens = completion.logprobs.tokens[start_idx:end]
     logprobs = completion.logprobs.token_logprobs[start_idx:end]
     return tokens, collect(Float64, logprobs)

@@ -15,11 +15,8 @@ end
     # Check completion tokens are as expected
     completion = response.choices[1]
     output = completion.text
-    stop_idx = GenGPT3.find_stop_index(completion, 1)
-    tokens = completion.logprobs.tokens[1:stop_idx]
-    logprobs = completion.logprobs.token_logprobs[1:stop_idx]
-    @test tokens[end] == "<|endoftext|>"
-    @test output == join(tokens[1:end-1])
+    tokens = completion.logprobs.tokens[1:end]
+    @test output == join(tokens)
     
     # Test API call with custom stop sequence
     response = GenGPT3.gpt3_api_call(
@@ -32,12 +29,9 @@ end
     # Check completion tokens are as expected
     completion = response.choices[1]
     output = completion.text
-    n_stop_tokens = length(GenGPT3.tokenize(" Mount Sharp"))
-    stop_idx = GenGPT3.find_stop_index(completion, n_stop_tokens)
-    tokens = completion.logprobs.tokens[1:stop_idx]
-    logprobs = completion.logprobs.token_logprobs[1:stop_idx]
-    @test tokens[end-1:end] == [" Mount", " Sharp"]
-    @test output == join(tokens[1:end-2])
+    tokens = completion.logprobs.tokens[1:end]
+    @test tokens[end-1:end] != [" Mount", " Sharp"]
+    @test output == join(tokens)
 
     # Test multi-prompt API call
     prompts = [

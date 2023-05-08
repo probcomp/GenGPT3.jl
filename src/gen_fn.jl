@@ -127,7 +127,6 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     # Call GPT3 API 
     response = gpt3_api_call(
         prompt;
-        logprobs=0,
         model=gen_fn.model,
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
@@ -138,13 +137,8 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     )
     completion = response.choices[1]
 
-    # Construct trace from completion
-    output = completion.text
-    tokens, logprobs = extract_tokens_until_stop(completion, gen_fn.n_stop)
-    logprobs = gen_fn.temperature == 0.0 ?
-        zeros(Float64, length(tokens)) : logprobs ./ gen_fn.temperature
-    score = isempty(logprobs) ? 0.0 : sum(logprobs)
-    trace = GPT3Trace(gen_fn, prompt, output, tokens, logprobs, score) 
+    # Evaluate probability of completion by calling `generate`
+    trace, _ = generate(gen_fn, args, GPT3ChoiceMap(completion.text))
 
     return trace
 end
