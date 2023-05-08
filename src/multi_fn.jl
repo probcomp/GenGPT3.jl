@@ -119,8 +119,6 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     n = length(prompts)
     outputs = Vector{String}(undef, n)
 
-    # Prevent <|endoftext|> from being generated when using custom stop tokens
-    logit_bias = isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS
     # Request completions through GPT-3 API
     choices = gpt3_multi_prompt_api_call(
         prompts;
@@ -128,7 +126,7 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
         stop=gen_fn.stop,
-        logit_bias=logit_bias,
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
@@ -196,7 +194,7 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS,
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )
@@ -311,7 +309,7 @@ function update(trace::MultiGPT3Trace, args::Tuple,
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS,
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )
@@ -407,7 +405,7 @@ function regenerate(trace::MultiGPT3Trace, args::Tuple,
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS,
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )

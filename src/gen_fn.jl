@@ -108,7 +108,7 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     model::String = "text-davinci-002"
     temperature::Float64 = 1.0
     max_tokens::Int = 1024
-    stop::Union{String,Nothing} = nothing
+    stop::Union{String,Nothing} = nothing,
     n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
     api_key_lookup::Function = lookup_openai_api_key
     organization_lookup::Function = lookup_openai_organization
@@ -134,8 +134,6 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     # Extract prompt
     prompt = args[1]
 
-    # Prevent <|endoftext|> from being generated when using custom stop tokens
-    logit_bias = isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS
     # Call GPT3 API 
     response = gpt3_api_call(
         prompt;
@@ -143,7 +141,7 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
         stop=gen_fn.stop,
-        logit_bias=logit_bias,
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
@@ -179,8 +177,6 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
         return trace, score
     end
 
-    # Prevent <|endoftext|> from being generated when using custom stop tokens
-    logit_bias = isnothing(gen_fn.stop) ? nothing : NO_EOT_BIAS
     # Call GPT3 API to evaluate log probabilities
     response = gpt3_api_call(
         full_text::Union{String, Vector{Int}},
@@ -190,7 +186,7 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
         max_tokens=0,
         echo=true,
         stop=gen_fn.stop,
-        logit_bias=logit_bias,
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )

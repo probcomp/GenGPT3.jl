@@ -1,6 +1,6 @@
 ## GPT-3 API and utilities ##
 
-const NO_EOT_BIAS = Dict(GPT_EOT_ID => -100)
+const NO_EOT_BIAS = Dict(string(GPT_EOT_ID) => -100)
 
 "Return API key stored in the OPENAI_API_KEY environment variable."
 lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
@@ -166,3 +166,32 @@ function construct_full_text(
     end
     return full_text
 end
+
+"Standardize logit bias input to a Dict{String,Float64}."
+function standardize_logit_bias(logit_bias::Dict, stop=nothing)
+    new_logit_bias = Dict{String,Float64}()
+    if !isnothing(stop) && isempty(logit_bias)
+        new_logit_bias[string(GPT_EOT_ID)] = -100
+    end
+    for (key, value) in logit_bias
+        @assert value isa Real
+        if key isa Int
+            new_logit_bias[string(key)] = Float64(value)
+        elseif !isnothing(tryparse(Int, key))
+            new_logit_bias[string(parse(Int, key))] = Float64(value)
+        elseif key isa String
+            token_ids = id_tokenize(key)
+            @assert length(token_ids) == 1 "$key is not a valid token"
+            new_logit_bias[string(token_ids[1])] = Float64(value)
+        else
+            error("Invalid token identifief type: $(typeof(key))")
+        end
+    end
+    return new_logit_bias
+end
+
+# If a stop token is specified, we ban <|endoftext|> from being generated
+standardize_logit_bias(logit_bias::Nothing, stop) = NO_EOT_BIAS
+
+standardize_logit_bias(logit_bias::Nothing, stop::Nothing) = logit_bias
+
