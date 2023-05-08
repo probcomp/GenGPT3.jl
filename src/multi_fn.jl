@@ -90,6 +90,9 @@ a batch of prompts, and returns the resulting completions.
 """
 (gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String}) =
     get_retval(simulate(gen_fn, (prompts,)))
+
+(gen_fn::MultiGPT3GenerativeFunction)(prompt::String, n::Int) =
+    gen_fn(fill(prompt, n))
     
 function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     # Extract prompts and initialize arrays
@@ -121,6 +124,9 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
 
     return trace
 end
+
+simulate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}) =
+    simulate(gen_fn, (fill(args[1], args[2]),))
 
 function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     # Check whether any outputs are constrained
@@ -211,7 +217,13 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     return trace, weight
 end
 
+generate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}, constraints::ChoiceMap) =
+    generate(gen_fn, (fill(args[1], args[2]),), constraints)
+
 generate(gen_fn::MultiGPT3GF, args::Tuple, ::EmptyChoiceMap) =
+    simulate(gen_fn, args), 0.0
+
+generate(gen_fn::MultiGPT3GF, args::Tuple{String, Int}, ::EmptyChoiceMap) =
     simulate(gen_fn, args), 0.0
 
 function project(trace::MultiGPT3Trace, selection::Selection)

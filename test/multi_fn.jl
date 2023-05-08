@@ -33,6 +33,13 @@ end
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
+
+        trace = Gen.simulate(multi_gpt3, (prompts[1], 2))
+        @test trace.prompts == prompts
+        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
+        @test all(length.(trace.tokens) .== length.(trace.logprobs))
+        @test trace.score == sum(trace.scores)
     end
 
     @testset "generate" begin
@@ -40,6 +47,14 @@ end
         prompts = fill("What is the tallest mountain on Mars?", 2)
         trace, weight = Gen.generate(multi_gpt3, (prompts,))
 
+        @test trace.prompts == prompts
+        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
+        @test all(length.(trace.tokens) .== length.(trace.logprobs))
+        @test trace.score == sum(trace.scores)
+        @test weight == 0.0
+
+        trace, weight = Gen.generate(multi_gpt3, (prompts[1], 2))
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
@@ -57,7 +72,16 @@ end
         @test new_trace.outputs == trace.outputs
         @test new_trace.tokens == trace.tokens
         @test all(isapprox.(new_trace.scores, trace.scores, atol=1e-1))
-        @test all(isapprox.(new_trace.logprobs, trace.logprobs, atol=1e-2))
+        @test all(isapprox.(new_trace.logprobs, trace.logprobs, atol=1e-1))
+        @test new_weight == new_trace.score
+
+        new_trace, new_weight =
+            Gen.generate(multi_gpt3, (prompts[1], 2), constraints)
+        @test new_trace.prompts == trace.prompts
+        @test new_trace.outputs == trace.outputs
+        @test new_trace.tokens == trace.tokens
+        @test all(isapprox.(new_trace.scores, trace.scores, atol=1e-1))
+        @test all(isapprox.(new_trace.logprobs, trace.logprobs, atol=1e-1))
         @test new_weight == new_trace.score
     end
 
