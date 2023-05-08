@@ -2,7 +2,7 @@ if GenGPT3.lookup_openai_api_key() == ""
     error("OPENAI_API_KEY not set, GFI tests cannot run.")
 end 
 
-@testset "Generative Function Interface" begin
+@testset "GPT3GenerativeFunction" begin
 
     gpt3 = GPT3GF(model="text-babbage-001", max_tokens=256)
 

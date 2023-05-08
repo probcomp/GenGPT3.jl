@@ -52,6 +52,15 @@ get_retval(trace::GPT3Trace) = trace.output
 get_score(trace::GPT3Trace) = trace.score
 get_gen_fn(trace::GPT3Trace) = trace.gen_fn
 
+function Base.:(==)(trace1::GPT3Trace, trace2::GPT3Trace)
+    return (trace1.gen_fn == trace2.gen_fn &&
+            trace1.prompt == trace2.prompt &&
+            trace1.output == trace2.output &&
+            trace1.tokens == trace2.tokens &&
+            trace1.logprobs == trace2.logprobs &&
+            trace1.score == trace2.score)
+end
+
 ## GPT3GenerativeFunction ##
 
 """
