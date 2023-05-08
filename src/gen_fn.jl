@@ -108,7 +108,7 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     model::String = "text-davinci-002"
     temperature::Float64 = 1.0
     max_tokens::Int = 1024
-    stop::Union{String,Nothing} = nothing,
+    stop::Union{String,Nothing} = nothing
     n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
     api_key_lookup::Function = lookup_openai_api_key
     organization_lookup::Function = lookup_openai_organization
