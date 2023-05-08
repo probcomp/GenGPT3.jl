@@ -30,7 +30,7 @@ end
 
 "Tokenizes a string into a sequence of GPT-2 / GPT-3 string tokens."
 function tokenize(str::AbstractString)
-    return map(t -> t.x, GPT_TOKENIZER(Sentence(str)))
+    return map(t -> t.x::String, GPT_TOKENIZER(Sentence(str)))
 end
 
 "Detokenizes a sequence of GPT-2 / GPT-3 string tokens into a string."
