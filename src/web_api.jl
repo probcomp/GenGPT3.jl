@@ -71,12 +71,21 @@ function gpt3_multi_prompt_api_call(
         if verbose
             println("Making $n_request requests ($n_remaining remaining)...")
         end
-        response = gpt3_api_call(batch; verbose=verbose, options...)
-        n_received = length(choices)
-        resize!(choices, n_received + n_request)
-        for choice in response.choices
-            idx = n_received + choice.index + 1
-            choices[idx] = choice
+        if all(prompt == batch[1] for prompt in batch)
+            prompt = batch[1]
+            new_choices = gpt3_multi_completion_api_call(
+                prompt, n_request; batch_size=n_request,
+                verbose=verbose, options...
+            )
+            append!(choices, new_choices)
+        else
+            response = gpt3_api_call(batch; verbose=verbose, options...)
+            n_received = length(choices)
+            resize!(choices, n_received + n_request)
+            for choice in response.choices
+                idx = n_received + choice.index + 1
+                choices[idx] = choice
+            end
         end
     end
     return choices
@@ -88,6 +97,11 @@ function gpt3_multi_completion_api_call(
     batch_size::Int=min(n_completions, 16),
     verbose::Bool=false, options...
 )
+    if n_completions > 1 && get(options, :max_tokens, nothing) == 0
+        response = gpt3_api_call(prompt, 1; verbose=verbose, options...)
+        choices = fill(response.choices[1], n_completions)
+        return choices
+    end
     n_remaining = n_completions
     choices = JSON3.Object[]
     while n_remaining > 0
