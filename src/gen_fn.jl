@@ -127,8 +127,22 @@ const GPT3GF = GPT3GenerativeFunction
 Untraced execution of a [`GPT3GenerativeFunction`]. Calls GPT-3 with an optional
 `prompt` via the OpenAI API, and returns the resulting completion.
 """
-(gen_fn::GPT3GenerativeFunction)(prompt::String="") =
-    get_retval(simulate(gen_fn, (prompt,)))
+function (gen_fn::GPT3GenerativeFunction)(prompt::String="")
+    # Call GPT3 API 
+    response = gpt3_api_call(
+        prompt;
+        model=gen_fn.model,
+        temperature=gen_fn.temperature,
+        max_tokens=gen_fn.max_tokens,
+        stop=gen_fn.stop,
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        api_key=gen_fn.api_key_lookup(),
+        organization=gen_fn.organization_lookup()
+    )
+    completion = response.choices[1]
+    # Return text
+    return completion.text
+end
 
 function simulate(gen_fn::GPT3GF, args::Tuple)
     # Extract prompt

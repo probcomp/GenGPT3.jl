@@ -107,8 +107,26 @@ const MultiGPT3GF = MultiGPT3GenerativeFunction
 Untraced execution of a [`MultiGPT3GenerativeFunction`]. Calls GPT-3 with
 a batch of prompts, and returns the resulting completions.
 """
-(gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String}) =
-    get_retval(simulate(gen_fn, (prompts,)))
+function (gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String})
+    n = length(prompts)
+    outputs = Vector{String}(undef, n)
+    # Request completions through GPT-3 API
+    choices = gpt3_multi_prompt_api_call(
+        prompts;
+        model=gen_fn.model,
+        temperature=gen_fn.temperature,
+        max_tokens=gen_fn.max_tokens,
+        stop=gen_fn.stop,
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        api_key=gen_fn.api_key_lookup(),
+        organization=gen_fn.organization_lookup()
+    )
+    # Extract outputs
+    for (i, completion) in enumerate(choices)
+        outputs[i] = completion.text
+    end
+    return outputs
+end
 
 (gen_fn::MultiGPT3GenerativeFunction)(prompt::String, n::Int) =
     gen_fn(fill(prompt, n))
