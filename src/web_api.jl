@@ -21,8 +21,8 @@ function gpt3_api_call(
     logprobs::Union{Nothing,Int} = 0,
     echo::Bool = false,
     stop::Union{Nothing,String} = nothing,
-    verbose::Bool = false,
     logit_bias::Union{Dict,Nothing} = nothing,
+    verbose::Bool = false,
     options... # Other options
 )
     # Construct HTTP request headers and body
@@ -37,9 +37,11 @@ function gpt3_api_call(
         "max_tokens" => max_tokens,
         "logprobs" => logprobs,
         "echo" => echo,
-        "stop" => stop,
-        options...
+        "stop" => stop
     )
+    for (key, value) in options
+        body[string(key)] = value
+    end
     if !isnothing(logit_bias)
         body["logit_bias"] = logit_bias
     end
@@ -209,3 +211,37 @@ standardize_logit_bias(logit_bias::Nothing, stop) = NO_EOT_BIAS
 
 standardize_logit_bias(logit_bias::Nothing, stop::Nothing) = logit_bias
 
+"Call the OpenAI JSON API for text embeddings and return the results."
+function embeddings_api_call(
+    input;
+    model::String = "text-embedding-ada-002",
+    endpoint::String = "https://api.openai.com/v1/embeddings",
+    api_key::String = lookup_openai_api_key(),
+    organization::String = lookup_openai_organization(),
+    n_retries::Int = 10,
+    verbose::Bool = false,
+    options...
+)
+    # Construct HTTP request headers and body
+    headers = ["Content-Type" => "application/json",
+               "Authorization" => "Bearer $api_key",
+               "OpenAI-Organization" => organization]
+    body = Dict{String,Any}(
+        "input" => input,
+        "model" => model
+    )
+    for (key, value) in options
+        body[string(key)] = value
+    end
+    body = JSON3.write(body)
+    # Post request with exponential backoff
+    if verbose println("Posting HTTP request...") end
+    delays = ExponentialBackOff(n=n_retries, first_delay=0.5, max_delay=60.0,
+                                factor=2.0, jitter=0.1)
+    request = Base.retry(delays=delays,
+                         check=(_, e) -> HTTP.RetryRequest.isrecoverable(e)) do
+        HTTP.post(endpoint, headers, body, retry=false)
+    end
+    response = request()
+    return JSON3.read(response.body)
+end

@@ -21,5 +21,6 @@ include("web_api.jl")
 include("gen_fn.jl")
 include("multi_fn.jl")
 include("importance.jl")
+include("embedder.jl")
 
 end

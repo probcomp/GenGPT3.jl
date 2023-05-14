@@ -56,4 +56,13 @@ end
     @test length(choices) == 10
     @test all(c.text == choices[1].text for c in choices)
 
+    # Test embeddings API call
+    response = GenGPT3.embeddings_api_call(
+        ["What is the tallest mountain on Mars?",
+         "What is the tallest mountain on Earth?"],
+         model = "text-embedding-ada-002"
+    )
+    @test length(response.data) == 2
+    @test length(response.data[1].embedding) == 1536 
+    @test length(response.data[2].embedding) == 1536
 end
