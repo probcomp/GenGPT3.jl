@@ -186,7 +186,7 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
     valid = falses(0)
     n_remain, n_trials = (n_samples + 1), 0
     while n_remain > 0
-        new_trace = simulate(gen_fn.proposal_gf, (proposal_prompt, n_remain))
+        new_trace = simulate(gen_fn.proposal_gf, (n_remain, proposal_prompt))
         prop_trace = vcat(prop_trace, new_trace)
         new_valid = gen_fn.validator.(new_trace.outputs)
         valid = append!(valid, new_valid)
@@ -199,7 +199,7 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
     else
         prop_choices = get_choices(prop_trace)
         model_trace, _ =
-            generate(gen_fn.model_gf, (model_prompt, n_trials), prop_choices)
+            generate(gen_fn.model_gf, (n_trials, model_prompt), prop_choices)
     end
     # Compute importance weights and normalizing constant
     log_weights = model_trace.scores .- prop_trace.scores
