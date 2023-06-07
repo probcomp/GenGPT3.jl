@@ -1,5 +1,7 @@
 export findsimilar
 
+## Embedder ##
+
 """
     Embedder(
         model::String = "text-embedding-ada-002",
@@ -77,6 +79,8 @@ function similarity(
     return sims
 end
 
+## EmbeddingStore ##
+
 """
     EmbeddingStore
 
@@ -85,9 +89,9 @@ associated metadata. Texts with similar embeddings to an input text can be
 found using the `findsimilar` function. New texts and embeddings can be added
 with the `append!` and `push!` functions.
 
-`EmbeddingStore` supports the `Tables.jl` interface, so it can be used with
-`CSV.jl` to save and load data, e.g. `CSV.write("data.csv", store)` and
-`store = CSV.read("data.csv", EmbeddingStore)`.
+Loading and saving as a JSON file can be done via the `load_store` and
+`save_store` functions. In addition, `EmbeddingStore` implements the `Tables.jl`
+interface, so it can be used with `Tables.jl` compatible file formats.
 """
 struct EmbeddingStore
     embedder::Embedder
@@ -320,6 +324,47 @@ function findsimilar(
     return reversed ? reverse(data[idxs]) : data[idxs]
 end
 
-Tables.rows(store::EmbeddingStore) = Tables.rows(store.data)
+# Tables.jl integration
 
+Tables.rows(store::EmbeddingStore) = Tables.rows(store.data)
 Tables.columns(store::EmbeddingStore) = Tables.columns(store.data)
+Tables.istable(::Type{<:EmbeddingStore}) = true
+Tables.rowaccess(::Type{<:EmbeddingStore}) = true
+Tables.columnaccess(::Type{<:EmbeddingStore}) = true
+Tables.schema(store::EmbeddingStore) = Tables.schema(store.data)
+
+EmbeddingStore(columns::Tables.AbstractColumns) =
+    EmbeddingStore(Embedder(), FlexTable(columns))
+
+# Loading and saving
+
+"""
+    save_store(path::AbstractString, store::EmbeddingStore)
+
+Save an `EmbeddingStore` to `path` as a JSON file.
+"""
+function save_store(path::AbstractString, store::EmbeddingStore)
+    json = arraytable(store.data)
+    open(path, "w") do io
+        JSON3.pretty(io, json)
+    end
+    return path
+end
+
+"""
+    load_store(path::AbstractString, [embedder]; types...)
+
+Load an `EmbeddingStore` from `path` as a JSON file, optionally specifying the
+`embedder` to use, and column types as keyword arguments.
+"""
+function load_store(path::AbstractString, embedder=Embedder(); types...)
+    json = jsontable(read(path, String))
+    data = FlexTable(json)
+    data.text = convert(Vector{String}, data.text)
+    data.embedding = convert(Vector{Vector{Float64}}, data.embedding)
+    for (key, ty) in types
+        ty = Union{ty, Missing}
+        setproperty!(data, key, convert(Vector{ty}, getproperty(data, key)))
+    end
+    return EmbeddingStore(embedder, data)
+end

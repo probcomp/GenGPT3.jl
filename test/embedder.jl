@@ -31,34 +31,42 @@ end
     store = GenGPT3.EmbeddingStore(
         GenGPT3.Embedder(model = "text-embedding-ada-002"),
         ["What is the tallest mountain on Mercury?"],
-        planet = [:mercury]
+        planet = ["mercury"]
     )
     push!(store, "What is the tallest mountain on Mars?",
-          planet=:mars, special=true)
+          planet="mars", special=true)
     append!(store,
             ["What is the tallest mountain on Venus?",
              "What is the tallest mountain on Earth?"],
-            planet = [:venus, :earth])
+            planet = ["venus", "earth"])
 
     @test length(store) == 4
-    @test store[1].planet == :mercury && ismissing(store[1].special)
-    @test store[2].planet == :mars && store[2].special == true
-    @test store[3].planet == :venus && ismissing(store[3].special)
-    @test store[4].planet == :earth && ismissing(store[4].special)
+    @test store[1].planet == "mercury" && ismissing(store[1].special)
+    @test store[2].planet == "mars" && store[2].special == true
+    @test store[3].planet == "venus" && ismissing(store[3].special)
+    @test store[4].planet == "earth" && ismissing(store[4].special)
 
     entries = findsimilar(store, "What is the tallest mountain on Mars?", 3)
     @test length(entries) == 3
-    @test entries[1].planet == :mars
-    @test entries[2].planet == :venus
-    @test entries[3].planet == :mercury
+    @test entries[1].planet == "mars"
+    @test entries[2].planet == "venus"
+    @test entries[3].planet == "mercury"
 
     embedding = store.embedder("What is the tallest mountain on Mars?")
     entries = findsimilar(store, embedding, 3, reversed=true) do row 
         ismissing(row.special) || !row.special
     end 
     @test length(entries) == 3
-    @test entries[1].planet == :earth
-    @test entries[2].planet == :mercury
-    @test entries[3].planet == :venus
+    @test entries[1].planet == "earth"
+    @test entries[2].planet == "mercury"
+    @test entries[3].planet == "venus"
 
+    mktemp() do path, io
+        GenGPT3.save_store(path, store)
+        loaded_store = GenGPT3.load_store(path)
+        @test loaded_store.data.text == store.data.text
+        @test loaded_store.data.embedding == store.data.embedding
+        @test loaded_store.data.planet == store.data.planet
+        @test isequal(loaded_store.data.special, store.data.special)
+    end
 end

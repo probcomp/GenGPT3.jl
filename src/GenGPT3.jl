@@ -5,6 +5,7 @@ using JSON3
 using HTTP
 using Tables
 using TypedTables
+using JSONTables
 using Base: @kwdef
 
 import Gen:
