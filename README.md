@@ -92,3 +92,19 @@ julia> ids = GenGPT3.id_tokenize(text)
 julia> tokens = GenGPT3.decode(ids)
 ["What", "Ġis", "Ġthe", "Ġtallest", "Ġmountain", "Ġon", "ĠMars", "?"]
 ```
+
+Support for calling the OpenAI Embeddings API is also provided:
+
+```julia-repl
+julia> embedder = GenGPT3.Embedder(model="text-embedding-ada-002");
+
+julia> embedder("What is the tallest mountain on Mars?")
+1536-element Vector{Float64}:
+  0.009133313
+ -0.0017141271
+ -0.010894737
+  ⋮
+ -0.0018739601
+ -0.013621684
+ -0.037864104
+```
