@@ -3,6 +3,8 @@ module GenGPT3
 using Gen
 using JSON3
 using HTTP
+using Tables
+using TypedTables
 using Base: @kwdef
 
 import Gen:
