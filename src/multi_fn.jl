@@ -128,7 +128,7 @@ function (gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String})
     return outputs
 end
 
-(gen_fn::MultiGPT3GenerativeFunction)(prompt::String, n::Int) =
+(gen_fn::MultiGPT3GenerativeFunction)(n::Int, prompt::String) =
     gen_fn(fill(prompt, n))
     
 function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})

@@ -24,6 +24,16 @@ const GPT3ISChosenChoiceMap =
     Gen.StaticChoiceMap{(:chosen), Tuple{Int}, (), Tuple{}}
 
 """
+    GPT3ISValidChosenChoiceMap
+
+Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref)
+among all valid choices, corresponding to the address `:valid_chosen`.
+"""
+const GPT3ISValidChosenChoiceMap =
+    Gen.StaticChoiceMap{(:valid_chosen), Tuple{Int}, (), Tuple{}}
+
+
+"""
     GPT3ISChosenRegenChoiceMap
 
 Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref).
@@ -139,6 +149,16 @@ function simulate(gen_fn::GPT3IS{Nothing}, args::Tuple)
     else
         error("Expected 2 or 3 arguments to GPT3ImportanceSampler")
     end
+    # Return cached trace if available
+    if gen_fn.cache_traces
+        args = (n_samples, model_prompt, proposal_prompt)
+        trace = get(gen_fn.cache, args, nothing)
+        if !isnothing(trace) # Regenerate chosen index and return trace
+            selection = select(:chosen => true, OUTPUT_ADDR => nothing)
+            trace, _, _ = regenerate(trace, selection)
+            return trace
+        end
+    end
     # Sample and score completions
     prop_trace = simulate(gen_fn.proposal_gf, (n_samples, proposal_prompt))
     if gen_fn.model_gf === gen_fn.proposal_gf && model_prompt == proposal_prompt
@@ -167,6 +187,10 @@ function simulate(gen_fn::GPT3IS{Nothing}, args::Tuple)
         model_trace, prop_trace, valid, log_weights, log_z_est,
         chosen_idx, output, tokens, logprobs, model_score, score
     )
+    # Store trace in cache
+    if gen_fn.cache_traces
+        gen_fn.cache[args] = trace
+    end
     return trace
 end
 
@@ -180,6 +204,16 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
         proposal_prompt = model_prompt
     else
         error("Expected 2 or 3 arguments to GPT3ImportanceSampler")
+    end
+    # Return cached trace if available
+    if gen_fn.cache_traces
+        args = (n_samples, model_prompt, proposal_prompt)
+        trace = get(gen_fn.cache, args, nothing)
+        if !isnothing(trace) # Regenerate chosen index and return trace
+            selection = select(:chosen => true, OUTPUT_ADDR => nothing)
+            trace, _, _ = regenerate(trace, selection)
+            return trace
+        end
     end
     # Sample and validate completions until we reach `n_samples + 1`
     prop_trace = MultiGPT3Trace(gen_fn.proposal_gf)
@@ -220,6 +254,10 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
         model_trace, prop_trace, valid, log_weights, log_z_est,
         chosen_idx, output, tokens, logprobs, model_score, score
     )
+    # Store trace in cache
+    if gen_fn.cache_traces
+        gen_fn.cache[args] = trace
+    end
     return trace
 end
 
@@ -233,8 +271,24 @@ end
 
 # Chosen index is constrained
 function generate(gen_fn::GPT3IS, args::Tuple, constraints::GPT3ISChosenChoiceMap)
+    # Extract arguments
+    if length(args) == 3
+        n_samples, model_prompt, proposal_prompt = args
+    elseif length(args) == 2
+        n_samples, model_prompt = args
+        proposal_prompt = model_prompt
+    else
+        error("Expected 2 or 3 arguments to GPT3ImportanceSampler")
+    end
     # Run unconditional SIR, then select index
-    trace = simulate(gen_fn, args)
+    if gen_fn.cache_traces
+        args = (n_samples, model_prompt, proposal_prompt)
+        trace = get(gen_fn.cache, args) do 
+            simulate(gen_fn, args)
+        end
+    else
+        trace = simulate(gen_fn, args)
+    end
     # Select output etc. from model trace
     chosen_idx = get_value(constraints, :chosen)
     output = trace.model_trace.outputs[chosen_idx]
@@ -259,6 +313,55 @@ function generate(gen_fn::GPT3IS, args::Tuple, constraints::GPT3ISChosenChoiceMa
     if !is_valid
         return new_trace, -Inf
     elseif isnothing(gen_fn.validator) # Standard importance sampling
+        log_sum_weights = trace.log_z_est + log(trace.n_samples)
+    else # Alive importance sampling
+        log_sum_weights = trace.log_z_est + log(length(trace.valid) - 1)
+    end
+    weight = trace.log_weights[chosen_idx] - log_sum_weights
+    return new_trace, weight
+end
+
+# Valid chosen index is constrained
+function generate(gen_fn::GPT3IS, args::Tuple,
+                  constraints::GPT3ISValidChosenChoiceMap)
+    # Extract arguments
+    if length(args) == 3
+        n_samples, model_prompt, proposal_prompt = args
+    elseif length(args) == 2
+        n_samples, model_prompt = args
+        proposal_prompt = model_prompt
+    else
+        error("Expected 2 or 3 arguments to GPT3ImportanceSampler")
+    end
+    # Run unconditional SIR, then select index
+    if gen_fn.cache_traces
+        args = (n_samples, model_prompt, proposal_prompt)
+        trace = get(gen_fn.cache, args) do 
+            simulate(gen_fn, args)
+        end
+    else
+        trace = simulate(gen_fn, args)
+    end
+    # Determine chosen index
+    valid_chosen_idx = get_value(constraints, :valid_chosen)
+    @assert 1 <= valid_chosen_idx <= trace.n_samples
+    chosen_idx = findall(trace.valid)[valid_chosen_idx]
+    # Select output etc. from model trace
+    output = trace.model_trace.outputs[chosen_idx]
+    tokens = trace.model_trace.tokens[chosen_idx]
+    logprobs = trace.model_trace.logprobs[chosen_idx]
+    model_score = trace.model_trace.scores[chosen_idx]
+    # Compute score and construct trace
+    score = model_score - trace.log_z_est
+    new_trace = GPT3ISTrace(
+        trace.gen_fn, trace.n_samples,
+        trace.model_prompt, trace.proposal_prompt,
+        trace.model_trace, trace.proposal_trace, trace.valid,
+        trace.log_weights, trace.log_z_est,
+        chosen_idx, output, tokens, logprobs, model_score, score
+    )
+    # Compute weight for generate
+    if isnothing(gen_fn.validator) # Standard importance sampling
         log_sum_weights = trace.log_z_est + log(trace.n_samples)
     else # Alive importance sampling
         log_sum_weights = trace.log_z_est + log(length(trace.valid) - 1)
