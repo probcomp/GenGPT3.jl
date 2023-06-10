@@ -237,11 +237,12 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
     end
     # Compute importance weights and normalizing constant
     log_weights = model_trace.scores .- prop_trace.scores
-    valid_log_weights = resize!(log_weights .* valid, n_trials - 1)
+    valid_log_weights = log_weights[valid][1:n_samples]
     log_sum_weights = logsumexp(valid_log_weights)
     log_z_est = log_sum_weights - log(n_trials - 1)
     # Resample according to importance weights
-    chosen_idx = randboltzmann(1:(n_trials-1), valid_log_weights)
+    valid_chosen_idx = randboltzmann(1:n_samples, valid_log_weights)
+    chosen_idx = findall(valid)[valid_chosen_idx]
     # Select output etc. from model trace
     output = model_trace.outputs[chosen_idx]
     tokens = model_trace.tokens[chosen_idx]
@@ -406,11 +407,12 @@ function update(trace::GPT3ISTrace, args::Tuple, argdiffs::Tuple,
         argdiffs = (NoChange(), NoChange(), NoChange())
     end    
     # Dispatch to `update` implementations for specific constraints
-    if isempty(constraints)
-        return update(trace, args, argdiffs, EmptyChoiceMap())
-    end
     if argdiffs isa NTuple{3, NoChange}
-        return update(trace, args, argdiffs, StaticChoiceMap(constraints))
+        if isempty(constraints)
+            return update(trace, args, argdiffs, EmptyChoiceMap())
+        else
+            return update(trace, args, argdiffs, StaticChoiceMap(constraints))
+        end
     end
     # Default to calling `generate`
     new_trace, _ = generate(trace.gen_fn, args, constraints)
@@ -480,9 +482,9 @@ function regenerate(trace::GPT3ISTrace, ::Tuple, ::NTuple{3, NoChange},
     if isnothing(trace.gen_fn.validator)
         chosen_idx = randboltzmann(1:trace.n_samples, trace.log_weights)
     else
-        n_trials = length(trace.valid)
-        valid_log_weights = resize!(trace.log_weights .* trace.valid, n_trials - 1)
-        chosen_idx = randboltzmann(1:(n_trials-1), valid_log_weights)
+        valid_log_weights = trace.log_weights[trace.valid][1:trace.n_samples]
+        valid_chosen_idx = randboltzmann(1:trace.n_samples, valid_log_weights)
+        chosen_idx = findall(trace.valid)[valid_chosen_idx]
     end
     # Select output etc. from model trace
     output = trace.model_trace.outputs[chosen_idx]

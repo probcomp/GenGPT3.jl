@@ -25,6 +25,10 @@ function gpt3_api_call(
     verbose::Bool = false,
     options... # Other options
 )
+    if temperature > 2.0
+        @warn "Temperature $temperature is too high, setting to 2.0"
+        temperature = 2.0
+    end
     # Construct HTTP request headers and body
     headers = ["Content-Type" => "application/json",
                "Authorization" => "Bearer $api_key",
