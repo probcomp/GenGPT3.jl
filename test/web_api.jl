@@ -17,7 +17,7 @@ end
     output = completion.text
     tokens = completion.logprobs.tokens[1:end]
     @test output == join(tokens)
-    
+
     # Test API call with custom stop sequence
     response = GenGPT3.gpt3_api_call(
         "What is the tallest mountain on Mars?", 1, model="text-babbage-001",
@@ -32,6 +32,37 @@ end
     tokens = completion.logprobs.tokens[1:end]
     @test tokens[end-1:end] != [" Mount", " Sharp"]
     @test output == join(tokens)
+
+    # Test token extraction after prompt
+    prompt = "What is the tallest mountain on Mars?"
+    output = "\n\nThe tallest mountain on Mars is Mount Sharp, " *
+             "which is located in the Martian equator."
+    response = GenGPT3.gpt3_api_call(
+        prompt * output, 1, model="text-babbage-001", echo=true,
+        logprobs=0, temperature=0.0, max_tokens=0
+    )
+
+    completion = response.choices[1]
+    start_idx = GenGPT3.find_start_index(completion, prompt)
+    @test start_idx == length(GenGPT3.tokenize(prompt)) + 1
+    output_tokens, _ = GenGPT3.extract_tokens_after_prompt(completion, prompt)
+    @test join(output_tokens) == output
+
+    # Test token extraction up to stop token
+    prompt = "What is the tallest mountain on Mars?"
+    output = "\n\nThe tallest mountain on Mars is Mount Sharp, " *
+             "which is located in the Martian equator."
+    stop = "."
+    response = GenGPT3.gpt3_api_call(
+        prompt, 1, model="text-babbage-001", logit_bias=GenGPT3.NO_EOT_BIAS,
+        logprobs=0, temperature=0.0, max_tokens=32
+    )
+
+    completion = response.choices[1]
+    stop_idx = GenGPT3.find_stop_index(completion, stop)
+    @test stop_idx == length(GenGPT3.tokenize(output))
+    output_tokens, _ = GenGPT3.extract_tokens_until_stop(completion, stop)
+    @test join(output_tokens) == output
 
     # Test multi-prompt API call
     prompts = [

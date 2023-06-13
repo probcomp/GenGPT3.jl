@@ -125,12 +125,35 @@ end
 "Find the index of the completion's first token when a prompt is echoed."
 function find_start_index(completion, prompt::String)
     text_offsets = completion.logprobs.text_offset
-    if isempty(text_offsets)
+    if isempty(text_offsets) || length(completion.text) <= length(prompt)
         return 0
     else
         start_idx = findfirst(==(length(prompt)), text_offsets)
         return start_idx
     end
+end
+
+"Find the index of a completion's last token, including the stop sequence."
+function find_stop_index(completion, stop::String)
+    if completion.finish_reason == "stop"
+        error("Cannot find stop sequence if completion is stopped server-side.")
+    end
+    stop_tokens = tokenize(stop, normalized=false)
+    first_stop_idx = findfirst(in(stop_tokens), completion.logprobs.tokens)
+    if isnothing(first_stop_idx)
+        return length(completion.logprobs.tokens)
+    else
+        last_stop_idx = first_stop_idx + length(stop_tokens) - 1
+        return last_stop_idx
+    end
+end
+
+"Extract tokens and logprobs from completion up to stop sequence."
+function extract_tokens_until_stop(completion, stop::String)
+    stop_idx = find_stop_index(completion, stop)
+    tokens = completion.logprobs.tokens[1:stop_idx]
+    logprobs = completion.logprobs.token_logprobs[1:stop_idx]
+    return tokens, logprobs
 end
 
 "Extract tokens and logprobs from completion after prompt."
@@ -204,7 +227,7 @@ function standardize_logit_bias(logit_bias::Dict, stop=nothing)
             @assert length(token_ids) == 1 "$key is not a valid token"
             new_logit_bias[string(token_ids[1])] = Float64(value)
         else
-            error("Invalid token identifief type: $(typeof(key))")
+            error("Invalid token identifier type: $(typeof(key))")
         end
     end
     return new_logit_bias
