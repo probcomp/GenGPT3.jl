@@ -5,7 +5,7 @@ using TextEncodeBase
 using JSON3
 
 import BytePairEncoding: GPT2Tokenization, gpt2_codemap
-import TextEncodeBase: FlatTokenizer, CodeNormalizer, Sentence, codeunmap
+import TextEncodeBase: FlatTokenizer, CodeNormalizer, Sentence, codemap, codeunmap
 
 const ARTIFACT_DIR = normpath(dirname(@__DIR__), "artifacts")
 
@@ -19,23 +19,27 @@ const GPT_TOKENIZER = FlatTokenizer(CodeNormalizer(BPETokenization(GPT2Tokenizat
 const GPT_EOT_ID = 50256
 
 "Encodes a sequence of GPT-2 / GPT-3 tokens into integer token IDs."
-function encode(tokens::AbstractVector{<:AbstractString})
+function encode(tokens::AbstractVector{<:AbstractString}; normalized=true)
+    tokens = normalized ? tokens : map(t -> codemap(GPT_CODEMAP, t), tokens)
     return map(t -> GPT_VOCAB_DICT[t]::Int, tokens)
 end
 
 "Decodes a sequence of GPT-2 / GPT-3 token IDs into string tokens."
-function decode(token_ids::AbstractVector{<:Integer})
-    return map(i -> GPT_VOCAB_LIST[i+1]::String, token_ids)
+function decode(token_ids::AbstractVector{<:Integer}; normalized=true)
+    tokens = map(i -> GPT_VOCAB_LIST[i+1]::String, token_ids)
+    return normalized ? tokens : map(t -> codeunmap(GPT_CODEMAP, t), tokens)
 end
 
 "Tokenizes a string into a sequence of GPT-2 / GPT-3 string tokens."
-function tokenize(str::AbstractString)
-    return map(t -> t.x::String, GPT_TOKENIZER(Sentence(str)))
+function tokenize(str::AbstractString; normalized=true)
+    tokens = map(t -> t.x::String, GPT_TOKENIZER(Sentence(str)))
+    return normalized ? tokens : map(t -> codeunmap(GPT_CODEMAP, t), tokens)
 end
 
 "Detokenizes a sequence of GPT-2 / GPT-3 string tokens into a string."
-function detokenize(tokens::AbstractVector{<:AbstractString})
-    return join(map(t -> codeunmap(GPT_CODEMAP, t), tokens))
+function detokenize(tokens::AbstractVector{<:AbstractString}; normalized=true)
+    tokens = normalized ? map(t -> codeunmap(GPT_CODEMAP, t), tokens) : tokens
+    return join(tokens)
 end
 
 "Tokenizes a string into a sequence of GPT-2 / GPT-3 token IDs."
