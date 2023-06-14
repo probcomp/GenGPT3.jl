@@ -107,12 +107,18 @@ end
 ## GPT3ImportanceSampler ##
 
 """
-    GPT3ImportanceSampler
+    GPT3ImportanceSampler(;
+        model_gf::MultiGPT3GF = MultiGPT3GF(),
+        proposal_gf::MultiGPT3GF = model_gf,
+        validator::V = nothing,
+        max_samples::Union{Int, Nothing} = nothing,
+        cache_traces::Bool = false,
+    )
 
 A generative function that performs importance sampling from a GPT-3 model
-using a [`MultiGPT3GF`](@ref) generative function as both the model and the
-proposal. Called with arguments `(n_samples, model_prompt, proposal_prompt)`,
-where `n_samples` is the number of samples to draw, `model_prompt` is the prompt
+using [`MultiGPT3GF`](@ref) generative functions as the model and the proposal.
+Called with arguments `(n_samples, model_prompt, proposal_prompt)`, where
+`n_samples` is the number of samples to draw, `model_prompt` is the prompt
 to use for the model, and `proposal_prompt` is the prompt to use for the
 proposal.
 
@@ -121,11 +127,24 @@ score each sample, and importance weights are computed. A single sample is then
 chosen according to the importance weights, which is returned as the output of
 the generative function. Both the `output` and `chosen` index are part of the
 trace's choicemap.
+
+# Arguments
+- `model_gf::MultiGPT3GF`: The generative function to use for the model.
+- `proposal_gf::MultiGPT3GF`: The generative function to use for the proposal.
+- `validator`: A validator function to use for the sample outputs. If provided,
+    samples will be drawn until the number of valid samples is equal to
+    `n_samples`. If set to `nothing`, no validation is performed. 
+- `max_samples::Union{Int, Nothing}`: The maximum number of samples to draw
+    from the proposal if validation is enabled. If set to `nothing`, no maximum
+    is enforced.
+- `cache_traces::Bool`: Whether to cache traces. If set to `true`, traces will
+    be cached in a dictionary, and reused if the same arguments are provided.
 """
 @kwdef struct GPT3ImportanceSampler{V} <: GenerativeFunction{String,GPT3ISTrace}
     model_gf::MultiGPT3GF = MultiGPT3GF()
     proposal_gf::MultiGPT3GF = model_gf
     validator::V = nothing
+    max_samples::Union{Int, Nothing} = nothing
     cache_traces::Bool = false
     cache::Dict{Tuple{Int, String, String}, GPT3ISTrace} =
         Dict{Tuple{Int, String, String}, GPT3ISTrace}()
@@ -223,12 +242,17 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
         n_request = n_trials == 0 || sum(valid) == 0 ?
             n_remain : ceil(Int, n_remain * n_trials / sum(valid))
         n_request = min(n_request, DEFAULT_BATCH_SIZE)
+        n_request = isnothing(gen_fn.max_samples) ?
+            n_request : min(n_request, gen_fn.max_samples - n_trials)
         new_trace = simulate(gen_fn.proposal_gf, (n_request, proposal_prompt))
         prop_trace = vcat(prop_trace, new_trace)
         new_valid = gen_fn.validator.(new_trace.outputs)
         valid = append!(valid, new_valid)
         n_trials += n_request
         n_remain -= sum(new_valid)
+        if !isnothing(gen_fn.max_samples) && n_trials >= gen_fn.max_samples
+            break
+        end
     end
     # Drop extra valid samples
     if n_remain < 0
@@ -240,6 +264,9 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
         resize!(prop_trace.logprobs, n_trials)
         resize!(prop_trace.scores, n_trials)
     end
+    # Check that we sampled at least one valid completion
+    n_samples = sum(valid) - 1
+    @assert (n_samples > 1) "No valid completions after $(n_trials) trials."
     # Score valid completions under model
     if gen_fn.model_gf === gen_fn.proposal_gf && model_prompt == proposal_prompt
         model_trace = prop_trace
