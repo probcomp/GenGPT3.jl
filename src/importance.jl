@@ -227,13 +227,28 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
         n_trials += n_remain
         n_remain -= sum(new_valid)
     end
-    # Score completions under model
+    # Score valid completions under model
     if gen_fn.model_gf === gen_fn.proposal_gf && model_prompt == proposal_prompt
         model_trace = prop_trace
     else
-        prop_choices = get_choices(prop_trace)
-        model_trace, _ =
-            generate(gen_fn.model_gf, (n_trials, model_prompt), prop_choices)
+        valid_outputs = prop_trace.outputs[valid][1:n_samples]
+        prop_choices = MultiGPT3ChoiceMap(valid_outputs)
+        partial_model_trace, _ =
+            generate(gen_fn.model_gf, (n_samples, model_prompt), prop_choices)
+        model_trace = MultiGPT3Trace(
+            gen_fn.model_gf,
+            fill(model_prompt, n_trials),
+            copy(prop_trace.outputs),
+            [String[] for _ in 1:n_trials],
+            [Float64[] for _ in 1:n_trials],
+            fill(-Inf, n_trials),
+            -Inf
+        )
+        for (k, i) in enumerate(findall(valid)[1:n_samples])
+            model_trace.tokens[i] = partial_model_trace.tokens[k]
+            model_trace.logprobs[i] = partial_model_trace.logprobs[k]
+            model_trace.scores[i] = partial_model_trace.scores[k]
+        end
     end
     # Compute importance weights and normalizing constant
     log_weights = model_trace.scores .- prop_trace.scores
