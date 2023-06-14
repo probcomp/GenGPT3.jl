@@ -181,22 +181,24 @@ function construct_full_text(
     prompt::String,
     output::String,
     stop::Union{String,Nothing},
-    n_stop_tokens::Int = isnothing(stop) ? 1 : length(tokenize(stop))
+    n_stop_tokens::Int = isnothing(stop) ? 1 : length(tokenize(stop));
+    return_ids::Bool = true
 )
     output_ids = id_tokenize(output)
     n_output_tokens = length(output_ids)
     if n_output_tokens + n_stop_tokens <= max_tokens # Finish due to stop words
         # Construct full text from prompt, output, and stop sequence
-        if isnothing(stop)
+        if return_ids
             # Convert to token IDs, append <|endoftext|>
             prompt_ids = id_tokenize(prompt)
-            full_text = append!(prompt_ids, output_ids, GPT_EOT_ID)
+            stop_ids = isnothing(stop) ? GPT_EOT_ID : id_tokenize(stop)
+            full_text = append!(prompt_ids, output_ids, stop_ids)
         else
             # Append stop sequence to text
             full_text = prompt * output * stop
         end
     elseif n_output_tokens == max_tokens # Finish due to length
-        if isnothing(stop)
+        if return_ids
             # Convert to token IDs
             prompt_ids = id_tokenize(prompt)
             full_text = append!(prompt_ids, output_ids)

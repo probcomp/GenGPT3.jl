@@ -135,7 +135,17 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     # Extract prompts and initialize arrays
     prompts = args[1]
     n = length(prompts)
-    outputs = Vector{String}(undef, n)
+
+    # Decide whether to sample and score in the same API call
+    if all(p === prompts[1] for p in prompts)
+        n_prompt_tokens = length(tokenize(prompts[1]))
+        same_call = n_prompt_tokens > gen_fn.max_tokens && !isnothing(gen_fn.stop)
+    else
+        same_call = false
+    end
+    stop = same_call ? nothing : gen_fn.stop
+    logit_bias = same_call ?
+        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop)
 
     # Request completions through GPT-3 API
     choices = gpt3_multi_prompt_api_call(
@@ -143,20 +153,37 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
         model=gen_fn.model,
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
-        stop=gen_fn.stop,
-        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        stop=stop,
+        logit_bias=logit_bias,
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
 
-    # Extract outputs
-    for (i, completion) in enumerate(choices)
-        outputs[i] = completion.text
+    # Score completions by calling `generate` if necessary
+    if !same_call
+        outputs = Vector{String}(undef, n)
+        for (i, completion) in enumerate(choices)
+            outputs[i] = completion.text
+        end
+        trace, _ = generate(gen_fn, args, MultiGPT3ChoiceMap(outputs))
+        return trace
     end
 
-    # Evaluate probability of completion by calling `generate`
-    trace, _ = generate(gen_fn, args, MultiGPT3ChoiceMap(outputs))
-
+    # Construct trace from completions
+    outputs = Vector{String}(undef, n)
+    tokens = Vector{Vector{String}}(undef, n)
+    logprobs = Vector{Vector{Float64}}(undef, n)
+    scores = Vector{Float64}(undef, n)
+    for (i, completion) in enumerate(choices)
+        tokens[i], lps = extract_tokens_until_stop(completion, gen_fn.stop)
+        logprobs[i] = gen_fn.temperature == 0.0 ?
+            zeros(Float64, length(tokens)) : lps ./ gen_fn.temperature
+        scores[i] = isempty(logprobs[i]) ? 0.0 : sum(logprobs[i])
+        outputs[i] = join(tokens[i][1:end-gen_fn.n_stop])
+    end
+    total_score = sum(scores)
+    trace = MultiGPT3Trace(gen_fn, prompts, outputs, tokens,
+                           logprobs, scores, total_score)
     return trace
 end
 
@@ -181,7 +208,7 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     constrained_idxs = Int[]
     unconstrained_idxs = Int[]
     impossible = false
-    full_texts = isnothing(gen_fn.stop) ? Vector{Int}[] : String[]
+    full_texts = Vector{Int}[]
     for i in eachindex(outputs)
         addr = i => OUTPUT_ADDR
         if !has_value(constraints, addr)
@@ -291,7 +318,7 @@ function update(trace::MultiGPT3Trace, args::Tuple,
     updated_idxs = Int[]
     created_idxs = Int[]
     impossible = false
-    full_texts = isnothing(gen_fn.stop) ? Vector{Int}[] : String[]
+    full_texts = Vector{Int}[]
     for i in 1:new_n
         addr = i => OUTPUT_ADDR
         if !has_value(constraints, addr)
@@ -397,7 +424,7 @@ function regenerate(trace::MultiGPT3Trace, args::Tuple,
     # Extract selected or updated outputs and construct full texts
     regenerated_idxs = Int[]
     updated_idxs = Int[]
-    full_texts = isnothing(gen_fn.stop) ? Vector{Int}[] : String[]
+    full_texts = Vector{Int}[]
     for i in 1:new_n
         addr = i => OUTPUT_ADDR
         if i > old_n || addr in selection

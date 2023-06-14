@@ -148,22 +148,40 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     # Extract prompt
     prompt = args[1]
 
+    # Decide whether to sample and score in the same API call
+    n_prompt_tokens = length(tokenize(prompt))
+    same_call = n_prompt_tokens > gen_fn.max_tokens && !isnothing(gen_fn.stop)
+    stop = same_call ? nothing : gen_fn.stop
+    logit_bias = same_call ?
+        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop)
+
     # Call GPT3 API 
     response = gpt3_api_call(
         prompt;
         model=gen_fn.model,
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
-        stop=gen_fn.stop,
-        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        stop=stop,
+        logit_bias=logit_bias,
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
     completion = response.choices[1]
 
-    # Evaluate probability of completion by calling `generate`
-    trace, _ = generate(gen_fn, args, GPT3ChoiceMap(completion.text))
+    # Score completion by calling `generate` if necessary
+    if !same_call
+        trace, _ = generate(gen_fn, args, GPT3ChoiceMap(completion.text))
+        return trace
+    end
 
+    # Construct trace from completion
+    tokens, logprobs = extract_tokens_until_stop(completion, gen_fn.stop)
+    logprobs = gen_fn.temperature == 0.0 ?
+        zeros(Float64, length(tokens)) : logprobs ./ gen_fn.temperature
+    score = isempty(logprobs) ? 0.0 : sum(logprobs)
+    output = join(tokens[1:end-gen_fn.n_stop])
+    trace = GPT3Trace(gen_fn, prompt, output, tokens, logprobs, score) 
+    
     return trace
 end
 
