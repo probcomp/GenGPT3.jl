@@ -1,6 +1,10 @@
 ## GPT-3 API and utilities ##
 
+"Logit bias to prevent GPT-3 from generating EOT tokens."
 const NO_EOT_BIAS = Dict(string(GPT_EOT_ID) => -100)
+
+"Default batch size for GPT-3 API calls."
+const DEFAULT_BATCH_SIZE = 16
 
 "Return API key stored in the OPENAI_API_KEY environment variable."
 lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
@@ -65,7 +69,7 @@ end
 "Make batched requests to the OpenAI API to reach prompt quota."
 function gpt3_multi_prompt_api_call(
     prompts::AbstractVector{<:Union{AbstractString, AbstractVector{Int}}};
-    batch_size::Int=min(length(prompts), 16),
+    batch_size::Int=min(length(prompts), DEFAULT_BATCH_SIZE),
     verbose::Bool=false,
     options...
 )
@@ -100,7 +104,7 @@ end
 "Make batched requests to the OpenAI API to reach completion quota."
 function gpt3_multi_completion_api_call(
     prompt::Union{AbstractString, AbstractVector{Int}}, n_completions::Int;
-    batch_size::Int=min(n_completions, 16),
+    batch_size::Int=min(n_completions, DEFAULT_BATCH_SIZE),
     verbose::Bool=false, options...
 )
     if n_completions > 1 && get(options, :max_tokens, nothing) == 0

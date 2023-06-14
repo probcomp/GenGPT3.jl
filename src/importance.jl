@@ -220,12 +220,25 @@ function simulate(gen_fn::GPT3IS, args::Tuple)
     valid = falses(0)
     n_remain, n_trials = (n_samples + 1), 0
     while n_remain > 0
-        new_trace = simulate(gen_fn.proposal_gf, (n_remain, proposal_prompt))
+        n_request = n_trials == 0 || sum(valid) == 0 ?
+            n_remain : ceil(Int, n_remain * n_trials / sum(valid))
+        n_request = min(n_request, DEFAULT_BATCH_SIZE)
+        new_trace = simulate(gen_fn.proposal_gf, (n_request, proposal_prompt))
         prop_trace = vcat(prop_trace, new_trace)
         new_valid = gen_fn.validator.(new_trace.outputs)
         valid = append!(valid, new_valid)
-        n_trials += n_remain
+        n_trials += n_request
         n_remain -= sum(new_valid)
+    end
+    # Drop extra valid samples
+    if n_remain < 0
+        n_trials = findall(valid)[n_samples+1]
+        resize!(valid, n_trials)
+        resize!(prop_trace.prompts, n_trials)
+        resize!(prop_trace.outputs, n_trials)
+        resize!(prop_trace.tokens, n_trials)
+        resize!(prop_trace.logprobs, n_trials)
+        resize!(prop_trace.scores, n_trials)
     end
     # Score valid completions under model
     if gen_fn.model_gf === gen_fn.proposal_gf && model_prompt == proposal_prompt
