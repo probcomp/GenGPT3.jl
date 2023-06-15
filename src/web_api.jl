@@ -126,6 +126,24 @@ function gpt3_multi_completion_api_call(
     return choices
 end
 
+"Return the indices of the first subsequence of `seq` that matches `subseq`."
+function find_first_subseq(subseq::AbstractArray, seq::AbstractArray)
+    remaining = @view seq[1:end]
+    remain_idx = 1
+    while length(remaining) >= length(subseq)
+        first_idx = findfirst(==(first(subseq)), remaining)
+        isnothing(first_idx) && return nothing
+        idxs = first_idx:(first_idx + length(subseq) - 1)
+        if subseq == @view(remaining[idxs])
+            return idxs .+ (remain_idx - 1)
+        else
+            remaining = @view remaining[(first_idx + 1):end]
+            remain_idx += first_idx
+        end
+    end
+    return nothing
+end
+
 "Find the index of the completion's first token when a prompt is echoed."
 function find_start_index(completion, prompt::String)
     text_offsets = completion.logprobs.text_offset
@@ -143,12 +161,11 @@ function find_stop_index(completion, stop::String)
         error("Cannot find stop sequence if completion is stopped server-side.")
     end
     stop_tokens = tokenize(stop, normalized=false)
-    first_stop_idx = findfirst(in(stop_tokens), completion.logprobs.tokens)
-    if isnothing(first_stop_idx)
+    stop_idxs = find_first_subseq(stop_tokens, completion.logprobs.tokens)
+    if isnothing(stop_idxs)
         return length(completion.logprobs.tokens)
     else
-        last_stop_idx = first_stop_idx + length(stop_tokens) - 1
-        return last_stop_idx
+        return stop_idxs[end]
     end
 end
 
