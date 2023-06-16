@@ -4,7 +4,7 @@
 const NO_EOT_BIAS = Dict(string(GPT_EOT_ID) => -100)
 
 "Default batch size for GPT-3 API calls."
-const DEFAULT_BATCH_SIZE = 16
+const DEFAULT_BATCH_SIZE = 20
 
 "Return API key stored in the OPENAI_API_KEY environment variable."
 lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")
@@ -134,7 +134,9 @@ function find_first_subseq(subseq::AbstractArray, seq::AbstractArray)
         first_idx = findfirst(==(first(subseq)), remaining)
         isnothing(first_idx) && return nothing
         idxs = first_idx:(first_idx + length(subseq) - 1)
-        if subseq == @view(remaining[idxs])
+        if last(idxs) > length(remaining)
+            return nothing
+        elseif subseq == @view(remaining[idxs])
             return idxs .+ (remain_idx - 1)
         else
             remaining = @view remaining[(first_idx + 1):end]
