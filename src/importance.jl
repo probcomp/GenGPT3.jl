@@ -21,7 +21,7 @@ const GPT3ISOutputChoiceMap = GPT3ChoiceMap
 Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref).
 """
 const GPT3ISChosenChoiceMap =
-    Gen.StaticChoiceMap{(:chosen), Tuple{Int}, (), Tuple{}}
+    Gen.StaticChoiceMap{(:chosen,), Tuple{Int}, (), Tuple{}}
 
 """
     GPT3ISValidChosenChoiceMap
@@ -30,7 +30,7 @@ Static choicemap alias. Contains the chosen index of a [`GPT3ISTrace`](@ref)
 among all valid choices, corresponding to the address `:valid_chosen`.
 """
 const GPT3ISValidChosenChoiceMap =
-    Gen.StaticChoiceMap{(:valid_chosen), Tuple{Int}, (), Tuple{}}
+    Gen.StaticChoiceMap{(:valid_chosen,), Tuple{Int}, (), Tuple{}}
 
 
 """
