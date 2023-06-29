@@ -16,6 +16,7 @@ export GPT3ChoiceMap, GPT3Trace
 export GPT3GenerativeFunction, GPT3GF
 export MultiGPT3ChoiceMap, MultiGPT3Trace
 export MultiGPT3GenerativeFunction, MultiGPT3GF
+export GPT3MixtureTrace, GPT3Mixture
 export GPT3ImportanceSamplerTrace, GPT3ISTrace
 export GPT3ImportanceSampler, GPT3IS
 
@@ -23,6 +24,7 @@ include("tokenizer.jl")
 include("web_api.jl")
 include("gen_fn.jl")
 include("multi_fn.jl")
+include("mixture.jl")
 include("importance.jl")
 include("embedder.jl")
 

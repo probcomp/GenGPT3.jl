@@ -157,6 +157,8 @@ Alias for [`GPT3ImportanceSampler`](@ref).
 """
 const GPT3IS = GPT3ImportanceSampler
 
+(gen_fn::GPT3IS)(args...) = get_retval(simulate(gen_fn, args))
+
 # Standard importance sampling
 function simulate(gen_fn::GPT3IS{Nothing}, args::Tuple)
     # Extract arguments
