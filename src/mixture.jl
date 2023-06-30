@@ -29,7 +29,6 @@ function Base.:(==)(trace1::GPT3MixtureTrace, trace2::GPT3MixtureTrace)
             trace1.multi_trace == trace2.multi_trace &&
             trace1.output == trace2.output &&
             trace1.tokens == trace2.tokens &&
-            trace1.logprobs == trace2.logprobs &&
             trace1.scores == trace2.scores &&
             trace1.score == trace2.score)
 end
@@ -75,26 +74,31 @@ function simulate(gen_fn::GPT3Mixture, args::Tuple)
     # Extract arguments
     prompts = args[1]
     probs = get(args, 2, ones(length(prompts)) ./ length(prompts))
+    @assert length(prompts) == length(probs)
     # Sample prompt and completion
     chosen_idx = categorical(probs)
     chosen_trace = simulate(gen_fn.multi_gf, (prompts[chosen_idx:chosen_idx],))
-    output = chosen_trace.output[1]
+    output = chosen_trace.outputs[1]
     # Score completion under other prompts
     outputs = MultiGPT3ChoiceMap(fill(output, length(prompts)-1))
     unchosen_prompts = prompts[1:end .!= chosen_idx]
-    multi_trace = generate(gen_fn.multi_gf, (unchosen_prompts,), outputs)
+    multi_trace, _ = generate(gen_fn.multi_gf, (unchosen_prompts,), outputs)
     # Insert chosen trace into multi trace
     insert!(multi_trace.prompts, chosen_idx, chosen_trace.prompts[1])
     insert!(multi_trace.outputs, chosen_idx, chosen_trace.outputs[1])
     insert!(multi_trace.tokens, chosen_idx, chosen_trace.tokens[1])
     insert!(multi_trace.logprobs, chosen_idx, chosen_trace.logprobs[1])
     insert!(multi_trace.scores, chosen_idx, chosen_trace.scores[1])
-    multi_trace.score += chosen_trace.score
+    multi_trace = MultiGPT3Trace(
+        multi_trace.gen_fn, multi_trace.prompts, multi_trace.outputs,
+        multi_trace.tokens, multi_trace.logprobs, multi_trace.scores,
+        multi_trace.score + chosen_trace.score
+    )
     # Compute probability of output under prompt mixture
     scores = copy(multi_trace.scores)
     score = logsumexp(scores .+ log.(probs))
     # Construct and return trace
-    tokens = copy(chosen_trace.tokens)
+    tokens = copy(chosen_trace.tokens[1])
     trace = GPT3MixtureTrace(gen_fn, prompts, probs, multi_trace,
                              output, tokens, scores, score)
     return trace
@@ -108,10 +112,11 @@ function generate(gen_fn::GPT3Mixture, args::Tuple, constraints::ChoiceMap)
     # Extract arguments
     prompts = args[1]
     probs = get(args, 2, ones(length(prompts)) ./ length(prompts))
+    @assert length(prompts) == length(probs)
     # Score completion under prompts
     output = get_value(constraints, OUTPUT_ADDR)
     outputs = MultiGPT3ChoiceMap(fill(output, length(prompts)))
-    multi_trace = generate(gen_fn.multi_gf, (prompts,), outputs)
+    multi_trace, _ = generate(gen_fn.multi_gf, (prompts,), outputs)
     # Compute probability of output under prompt mixture
     scores = copy(multi_trace.scores)
     score = logsumexp(scores .+ log.(probs))
@@ -143,11 +148,12 @@ function update(trace::GPT3MixtureTrace,
     prompts = args[1]
     prompt_diffs = argdiffs[1]
     output = get_value(constraints, OUTPUT_ADDR)
-    outputs = MultiGPT3ChoiceMap(fill(output, length(new_prompts)))
+    outputs = MultiGPT3ChoiceMap(fill(output, length(prompts)))
     multi_trace, _, _, _ =
         update(trace.multi_trace, (prompts,), (prompt_diffs,), outputs)
     # Compute probability of output under prompt mixture
     probs = get(args, 2, ones(length(prompts)) ./ length(prompts))
+    @assert length(prompts) == length(probs)
     scores = copy(multi_trace.scores)
     score = logsumexp(scores .+ log.(probs))
     # Construct new trace
@@ -166,6 +172,7 @@ function update(trace::GPT3MixtureTrace,
     # Return same trace if arguments do not change
     prompts = args[1]
     probs = get(args, 2, ones(length(prompts)) ./ length(prompts))
+    @assert length(prompts) == length(probs)
     if (argdiffs == (NoChange(), NoChange()) || 
         trace.prompts == prompts && trace.probs == probs)
         return trace, 0.0, NoChange(), EmptyChoiceMap()
@@ -203,6 +210,7 @@ function regenerate(trace::GPT3MixtureTrace,
     # Return same trace if arguments do not change
     prompts = args[1]
     probs = get(args, 2, ones(length(prompts)) ./ length(prompts))
+    @assert length(prompts) == length(probs)
     if (argdiffs == (NoChange(), NoChange()) || 
         trace.prompts == prompts && trace.probs == probs)
         return trace, 0.0, NoChange(), EmptyChoiceMap()

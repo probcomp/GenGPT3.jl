@@ -11,7 +11,7 @@
     @test GenGPT3.decode(ids, normalized=false) == unnorm_tokens
 
     @test GenGPT3.tokenize(input) == tokens
-    @test GenGPT3.tokenize(input, normalized=false) == norm_tokens
+    @test GenGPT3.tokenize(input, normalized=false) == unnorm_tokens
     @test GenGPT3.detokenize(tokens) == input
     @test GenGPT3.detokenize(unnorm_tokens, normalized=false) == input
 

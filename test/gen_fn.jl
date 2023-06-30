@@ -4,7 +4,7 @@ end
 
 @testset "GPT3GenerativeFunction" begin
 
-    gpt3 = GPT3GF(model="text-babbage-001", max_tokens=256)
+    gpt3 = GPT3GF(model="text-babbage-001", max_tokens=64)
 
     @testset "trace" begin
         prompt = "What is the tallest mountain on Mars?"
@@ -21,7 +21,7 @@ end
 
     @testset "simulate" begin
         prompt = "What is the tallest mountain on Mars?"
-        trace = Gen.simulate(gpt3, (prompt,))
+        trace = simulate(gpt3, (prompt,))
 
         @test trace.prompt == prompt
         @test trace.output == join(trace.tokens[1:end-1])
@@ -32,7 +32,7 @@ end
     @testset "generate" begin
         # Unconstrained generation
         prompt = "What is the tallest mountain on Mars?"
-        trace, weight = Gen.generate(gpt3, (prompt,))
+        trace, weight = generate(gpt3, (prompt,))
 
         @test trace.prompt == prompt
         @test trace.output == join(trace.tokens[1:end-1])
@@ -42,7 +42,7 @@ end
 
         # Constrained generation
         constraints = choicemap((:output, trace.output))
-        new_trace, new_weight = Gen.generate(gpt3, (prompt,), constraints)
+        new_trace, new_weight = generate(gpt3, (prompt,), constraints)
 
         @test new_trace.prompt == trace.prompt
         @test new_trace.output == trace.output
@@ -57,7 +57,7 @@ end
         prompt = "What is the tallest mountain on Mars?"
         output = "\n\nMount Olympus."
         constraints = choicemap((:output, output))
-        trace, _ = Gen.generate(gpt3, (prompt,), constraints)
+        trace, _ = generate(gpt3, (prompt,), constraints)
 
         # Updateless update
         new_trace, weight, retdiff, discard = 
@@ -90,7 +90,7 @@ end
         prompt = "What is the tallest mountain on Mars?"
         output = "\n\nMount Olympus."
         constraints = choicemap((:output, output))
-        trace, _ = Gen.generate(gpt3, (prompt,), constraints)
+        trace, _ = generate(gpt3, (prompt,), constraints)
 
         # Regenerate nothing
         new_trace, weight, retdiff = 

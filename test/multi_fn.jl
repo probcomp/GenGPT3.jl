@@ -4,7 +4,7 @@ end
 
 @testset "MultiGPT3GenerativeFunction" begin
 
-    multi_gpt3 = MultiGPT3GF(model="text-babbage-001", max_tokens=256)
+    multi_gpt3 = MultiGPT3GF(model="text-babbage-001", max_tokens=64)
 
     @testset "trace" begin
         prompts = fill("What is the tallest mountain on Mars?", 2)
@@ -26,7 +26,7 @@ end
 
     @testset "simulate" begin
         prompts = fill("What is the tallest mountain on Mars?", 2)
-        trace = Gen.simulate(multi_gpt3, (prompts,))
+        trace = simulate(multi_gpt3, (prompts,))
 
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
@@ -34,7 +34,7 @@ end
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
 
-        trace = Gen.simulate(multi_gpt3, (2, prompts[1]))
+        trace = simulate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
@@ -45,7 +45,7 @@ end
     @testset "generate" begin
         # Unconstrained generation
         prompts = fill("What is the tallest mountain on Mars?", 2)
-        trace, weight = Gen.generate(multi_gpt3, (prompts,))
+        trace, weight = generate(multi_gpt3, (prompts,))
 
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
@@ -54,7 +54,7 @@ end
         @test trace.score == sum(trace.scores)
         @test weight == 0.0
 
-        trace, weight = Gen.generate(multi_gpt3, (2, prompts[1]))
+        trace, weight = generate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
         @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
@@ -66,7 +66,7 @@ end
         constraints = choicemap((1 => :output, trace.outputs[1]),
                                 (2 => :output, trace.outputs[2]))
         new_trace, new_weight =
-            Gen.generate(multi_gpt3, (prompts,), constraints)
+            generate(multi_gpt3, (prompts,), constraints)
 
         @test new_trace.prompts == trace.prompts
         @test new_trace.outputs == trace.outputs
@@ -76,7 +76,7 @@ end
         @test new_weight == new_trace.score
 
         new_trace, new_weight =
-            Gen.generate(multi_gpt3, (2, prompts[1]), constraints)
+            generate(multi_gpt3, (2, prompts[1]), constraints)
         @test new_trace.prompts == trace.prompts
         @test new_trace.outputs == trace.outputs
         @test new_trace.tokens == trace.tokens
@@ -90,7 +90,7 @@ end
         prompts = fill("What is the tallest mountain on Mars?", 2)
         outputs = fill("\n\nMount Olympus.", 2)
         constraints = MultiGPT3ChoiceMap(outputs)
-        trace, _ = Gen.generate(multi_gpt3, (prompts,), constraints)
+        trace, _ = generate(multi_gpt3, (prompts,), constraints)
 
         # Updateless update
         new_trace, weight, retdiff, discard = 
@@ -126,7 +126,7 @@ end
         prompts = fill("What is the tallest mountain on Mars?", 2)
         outputs = fill("\n\nMount Olympus.", 2)
         constraints = MultiGPT3ChoiceMap(outputs)
-        trace, _ = Gen.generate(multi_gpt3, (prompts,), constraints)
+        trace, _ = generate(multi_gpt3, (prompts,), constraints)
 
         # Regenerate nothing
         new_trace, weight, retdiff = 
