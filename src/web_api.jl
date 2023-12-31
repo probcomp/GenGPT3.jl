@@ -4,7 +4,7 @@
 const NO_EOT_BIAS = Dict(string(GPT_EOT_ID) => -100)
 
 "Default batch size for GPT-3 API calls."
-const DEFAULT_BATCH_SIZE = 20
+const DEFAULT_BATCH_SIZE = 10
 
 "Return API key stored in the OPENAI_API_KEY environment variable."
 lookup_openai_api_key() = get(ENV, "OPENAI_API_KEY", "")

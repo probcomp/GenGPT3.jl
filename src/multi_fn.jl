@@ -75,6 +75,7 @@ end
         temperature = 1.0,
         max_tokens = 1024,
         stop = nothing,
+        batch_size = 10,
         api_key_lookup = () -> ENV["OPENAI_API_KEY"],
         organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
     )
@@ -90,6 +91,7 @@ in the `i => $OUTPUT_ADDR` address of the resulting trace.
     max_tokens::Int = 1024
     stop::Union{String,Nothing} = nothing
     n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
+    batch_size::Int = DEFAULT_BATCH_SIZE
     api_key_lookup::Function = lookup_openai_api_key
     organization_lookup::Function = lookup_openai_organization
 end
@@ -113,6 +115,7 @@ function (gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String})
     # Request completions through GPT-3 API
     choices = gpt3_multi_prompt_api_call(
         prompts;
+        batch_size=min(gen_fn.batch_size, n),
         model=gen_fn.model,
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
@@ -150,6 +153,7 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     # Request completions through GPT-3 API
     choices = gpt3_multi_prompt_api_call(
         prompts;
+        batch_size=min(gen_fn.batch_size, n),
         model=gen_fn.model,
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
@@ -233,6 +237,7 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
     if !isempty(constrained_idxs)
         choices = gpt3_multi_prompt_api_call(
             full_texts;
+            batch_size=min(gen_fn.batch_size, length(full_texts)),
             logprobs=0,
             model=gen_fn.model,
             temperature=gen_fn.temperature,
@@ -348,6 +353,7 @@ function update(trace::MultiGPT3Trace, args::Tuple,
     if !isempty(updated_idxs)
         choices = gpt3_multi_prompt_api_call(
             full_texts;
+            batch_size=min(gen_fn.batch_size, length(full_texts)),
             logprobs=0,
             model=gen_fn.model,
             temperature=gen_fn.temperature,
@@ -444,6 +450,7 @@ function regenerate(trace::MultiGPT3Trace, args::Tuple,
     if !isempty(updated_idxs)
         choices = gpt3_multi_prompt_api_call(
             full_texts;
+            batch_size=min(gen_fn.batch_size, length(full_texts)),
             logprobs=0,
             model=gen_fn.model,
             temperature=gen_fn.temperature,
