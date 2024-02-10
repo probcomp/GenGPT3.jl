@@ -1,53 +1,168 @@
 ## GPT-3 Tokenizer ##
 
-using BytePairEncoding
 using TextEncodeBase
-using JSON3
+using BytePairEncoding
 
-import BytePairEncoding: GPT2Tokenization, gpt2_codemap
-import TextEncodeBase: FlatTokenizer, CodeNormalizer, Sentence, codemap, codeunmap
+using TextEncodeBase: AbstractTokenization
+using BytePairEncoding: BPETokenizer, BPETokenization, TikTokenBPE, StringView
 
-const ARTIFACT_DIR = normpath(dirname(@__DIR__), "artifacts")
+const CL100K_BASE = BytePairEncoding.load_tiktoken("cl100k_base")
+const P50K_BASE = BytePairEncoding.load_tiktoken("p50k_base")
+const R50K_BASE = BytePairEncoding.load_tiktoken("r50k_base")
 
-const GPT_VOCAB_DICT = JSON3.read(read(joinpath(ARTIFACT_DIR, "vocab.json"), String))
-const GPT_VOCAB_LIST = [string(s) for s in keys(GPT_VOCAB_DICT)]
+const TOKENIZERS = Dict(
+    "cl100k_base" => CL100K_BASE,
+    "p50k_base" => P50K_BASE,
+    "r50k_base" => R50K_BASE
+)
 
-const GPT_BPE = BPE(joinpath(ARTIFACT_DIR, "bpe.txt"))
-const GPT_CODEMAP = gpt2_codemap()
-const GPT_TOKENIZER = FlatTokenizer(CodeNormalizer(BPETokenization(GPT2Tokenization(), GPT_BPE), GPT_CODEMAP))
-
-const GPT_EOT_ID = 50256
-
-"Encodes a sequence of GPT-2 / GPT-3 tokens into integer token IDs."
-function encode(tokens::AbstractVector{<:AbstractString}; normalized=true)
-    tokens = normalized ? tokens : map(t -> codemap(GPT_CODEMAP, t), tokens)
-    return map(t -> GPT_VOCAB_DICT[t]::Int, tokens)
+const ENCODERS = Dict{String, Dict{Vector{UInt8}, Int}}()
+for (name, tkr) in TOKENIZERS
+    bpe = tkr.tokenization.base.bpe
+    ENCODERS[name] = bpe.encoder
 end
 
-"Decodes a sequence of GPT-2 / GPT-3 token IDs into string tokens."
-function decode(token_ids::AbstractVector{<:Integer}; normalized=true)
-    tokens = map(i -> GPT_VOCAB_LIST[i+1]::String, token_ids)
-    return normalized ? tokens : map(t -> codeunmap(GPT_CODEMAP, t), tokens)
+const DECODERS = Dict{String, Dict{Int, Vector{UInt8}}}()
+for (name, tkr) in TOKENIZERS
+    bpe = tkr.tokenization.base.bpe
+    decoder = Dict{Int, Vector{UInt8}}()
+    for (code, id) in bpe.encoder
+        decoder[id] = code
+    end
+    DECODERS[name] = decoder
 end
 
-"Tokenizes a string into a sequence of GPT-2 / GPT-3 string tokens."
-function tokenize(str::AbstractString; normalized=true)
-    tokens = map(t -> t.x::String, GPT_TOKENIZER(Sentence(str)))
-    return normalized ? tokens : map(t -> codeunmap(GPT_CODEMAP, t), tokens)
+const EOT_IDS = Dict(
+    "cl100k_base" => 100257,
+    "p50k_base" => 50256,
+    "r50k_base" => 50256
+)
+
+const SPECIAL_TOKENS = Dict(
+    "cl100k_base" => Dict(
+        "<|endoftext|>" => 100257,
+        "<|fim_prefix|>" => 100258,
+        "<|fim_middle|>" => 100259,
+        "<|fim_suffix|>" => 100260,
+        "<|endofprompt|>" => 100276
+    ),
+    "p50k_base" => Dict(
+        "<|endoftext|>" => 50256
+    ),
+    "r50k_base" => Dict(
+        "<|endoftext|>" => 50256
+    )
+)
+for (name, tokens) in SPECIAL_TOKENS
+    decoder = DECODERS[name]
+    for (token, id) in tokens
+        decoder[id] = codeunits(token)
+    end
 end
 
-"Detokenizes a sequence of GPT-2 / GPT-3 string tokens into a string."
-function detokenize(tokens::AbstractVector{<:AbstractString}; normalized=true)
-    tokens = normalized ? map(t -> codeunmap(GPT_CODEMAP, t), tokens) : tokens
+const MODEL_ENCODINGS = Dict(
+    "gpt-4" => "cl100k_base",
+    "gpt-3.5-turbo" => "cl100k_base",
+    "gpt-3.5" => "cl100k_base",
+    "gpt-3.5-turbo-instruct" => "cl100k_base",
+    "gpt-35-turbo" => "cl100k_base",
+    # Current base models
+    "davinci-002" => "cl100k_base",
+    "babbage-002" => "cl100k_base",
+    # Embeddings
+    "text-embedding-ada-002" => "cl100k_base",
+    "text-embedding-3-small" => "cl100k_base",
+    "text-embedding-3-large" => "cl100k_base",
+    # Deprecated GPT-3.5 models
+    "text-davinci-003" => "p50k_base",
+    "text-davinci-002" => "p50k_base",
+    "text-davinci-001" => "r50k_base",
+    "text-curie-001" => "r50k_base",
+    "text-babbage-001" => "r50k_base",
+    "text-ada-001" => "r50k_base",
+    # Deprecated GPT-3 base models
+    "davinci" => "r50k_base",
+    "curie" => "r50k_base",
+    "babbage" => "r50k_base",
+    "ada" => "r50k_base"
+)
+
+"""
+    encode(encoding, tokens)
+
+Encodes a sequence of string tokens into integer token IDs. Supported values
+for `encoding` include `"cl100k_base"`, `"p50k_base"` and `"r50k_base"`. 
+"""
+function encode(name::AbstractString, tokens::AbstractVector{<:AbstractString})
+    encoder = ENCODERS[name]
+    special = SPECIAL_TOKENS[name]
+    return map(t -> get(() -> encoder[codeunits(t)], special, t), tokens)
+end
+encode(t::BPETokenizer, tokens::AbstractVector{<:AbstractString}) =
+    encode(TextEncodeBase.tokenization(t), tokens)
+encode(t::AbstractTokenization, tokens::AbstractVector{<:AbstractString}) =
+    encode(TextEncodeBase.base(t), tokens)
+encode(t::BPETokenization, tokens::AbstractVector{<:AbstractString}) =
+    encode(t.bpe, tokens)
+encode(bpe::TikTokenBPE, tokens::AbstractVector{<:AbstractString}) =
+    map(t -> bpe.encoder[codeunits(t)], tokens)
+
+"""
+    decode(encoding, token_ids)
+
+Decodes a sequence of token IDs into string tokens. Supported values for
+`encoding` include `"cl100k_base"`, `"p50k_base"` and `"r50k_base"`.
+"""
+function decode(name::AbstractString, token_ids::AbstractVector{<:Integer})
+    decoder = DECODERS[name]
+    return map(id -> String(StringView(decoder[id])), token_ids)
+end
+
+"""
+    tokenize(tokenizer, str)
+
+Tokenizes a string into a sequence of string tokens. Supported values for
+`tokenizer` include `"cl100k_base"`, `"p50k_base"` and `"r50k_base"`.
+"""
+function tokenize(name::AbstractString, str::AbstractString)
+    tokenizer = TOKENIZERS[name]
+    return tokenize(tokenizer, str)
+end
+tokenize(tokenizer::BPETokenizer, str::AbstractString) = tokenizer(str)
+
+"""
+    detokenize([tokenizer,] tokens)
+
+Detokenizes a sequence of string tokens into a string.
+"""
+function detokenize(tokens::AbstractVector{<:AbstractString})
     return join(tokens)
 end
+detokenize(name::AbstractString, tokens::AbstractVector{<:AbstractString}) =
+    detokenize(tokens)
+detokenize(tokenizer::BPETokenizer, tokens::AbstractVector{<:AbstractString}) =
+    detokenize(tokens)
 
-"Tokenizes a string into a sequence of GPT-2 / GPT-3 token IDs."
-function id_tokenize(str::AbstractString)
-    return encode(tokenize(str))
+"""
+    id_tokenize(tokenizer, str)
+
+Tokenizes a string into a sequence of token IDs. Supported values for
+`tokenizer` include `"cl100k_base"`, `"p50k_base"` and `"r50k_base"`.
+"""
+function id_tokenize(name::AbstractString, str::AbstractString)
+    tokenizer = TOKENIZERS[name]
+    tokens = tokenize(tokenizer, str)
+    return encode(name, tokens)
 end
+id_tokenize(tokenizer::BPETokenizer, str::AbstractString) =
+    encode(tokenizer, tokenize(tokenizer, str))
 
-"Detokenizes a sequence of GPT-2 / GPT-3 token IDs into a string."
-function id_detokenize(token_ids::AbstractVector{<:Integer})
-    return detokenize(decode(token_ids))
+"""
+    id_detokenize(tokenizer, token_ids)
+
+Detokenizes a sequence of token IDs into a string. Supported values for
+`tokenizer` include `"cl100k_base"`, `"p50k_base"` and `"r50k_base"`.
+"""
+function id_detokenize(name::AbstractString, token_ids::AbstractVector{<:Integer})
+    return detokenize(decode(name, token_ids))
 end

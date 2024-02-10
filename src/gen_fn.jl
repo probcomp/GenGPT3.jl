@@ -68,10 +68,11 @@ end
 
 """
     GPT3GenerativeFunction(;
-        model = "text-davinci-002",
+        model = "davinci-002",
         temperature = 1.0,
         max_tokens = 1024,
         stop = nothing,
+        encoding = GenGPT3.MODEL_ENCODINGS[model],
         api_key_lookup = () -> ENV["OPENAI_API_KEY"],
         organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
     )
@@ -86,13 +87,15 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
 
 # Arguments
 - `model::String`:
-    The pretrained model to query. Defaults to `"text-davinci-002"`.
+    The pretrained model to query. Defaults to `"davinci-002"`.
 - `temperature::Float64 = 1.0`:
     The softmax temperature. Values between `0.0`` and `2.0` are allowed.
     Higher temperatures increase randomness. Note that if this is not set
     to `1.0`, then the resulting log probabilities will no longer be normalized.
 - `max_tokens::Int = 1024`:
     The maximum number of output tokens generated (including the stop sequence).
+- `encoding::String = GenGPT.MODEL_ENCODINGS[model]`:
+    Tokenizer encoding for the model. For most models, this is `"cl100k_base"`.
 - `stop::Union{String,Nothing} = nothing`:
     The stop sequence as a string. Defaults to the `<|endoftext|>` token if not
     specified. If specified, then the model will be prevented from generating
@@ -105,11 +108,12 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     Defaults to the `"OPENAI_ORGANIZATION"` environment variable, if specified.
 """
 @kwdef struct GPT3GenerativeFunction <: GenerativeFunction{String,GPT3Trace}
-    model::String = "text-davinci-002"
+    model::String = "davinci-002"
     temperature::Float64 = 1.0
     max_tokens::Int = 1024
+    encoding::String = MODEL_ENCODINGS[model]
     stop::Union{String,Nothing} = nothing
-    n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
+    n_stop::Int = isnothing(stop) ? 1 : length(tokenize(encoding, stop))
     api_key_lookup::Function = lookup_openai_api_key
     organization_lookup::Function = lookup_openai_organization
 end
@@ -135,7 +139,7 @@ function (gen_fn::GPT3GenerativeFunction)(prompt::String="")
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
         stop=gen_fn.stop,
-        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
@@ -149,11 +153,11 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     prompt = args[1]
 
     # Decide whether to sample and score in the same API call
-    n_prompt_tokens = length(tokenize(prompt))
+    n_prompt_tokens = length(tokenize(gen_fn.encoding, prompt))
     same_call = n_prompt_tokens > gen_fn.max_tokens && !isnothing(gen_fn.stop)
     stop = same_call ? nothing : gen_fn.stop
     logit_bias = same_call ?
-        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop)
+        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding)
 
     # Call GPT3 API 
     response = gpt3_api_call(
@@ -175,7 +179,8 @@ function simulate(gen_fn::GPT3GF, args::Tuple)
     end
 
     # Construct trace from completion
-    tokens, logprobs = extract_tokens_until_stop(completion, gen_fn.stop)
+    tokens, logprobs = extract_tokens_until_stop(completion, gen_fn.stop;
+                                                 encoding=gen_fn.encoding)
     logprobs = gen_fn.temperature == 0.0 ?
         zeros(Float64, length(tokens)) : logprobs ./ gen_fn.temperature
     score = isempty(logprobs) ? 0.0 : sum(logprobs)
@@ -200,7 +205,8 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
 
     # Construct full text from prompt and output
     full_text = construct_full_text(gen_fn.max_tokens, prompt, output,
-                                    gen_fn.stop, gen_fn.n_stop)
+                                    gen_fn.stop, gen_fn.n_stop;
+                                    encoding=gen_fn.encoding)
 
     # If nothing is returned, then the constrained output is too long
     if isnothing(full_text)
@@ -218,7 +224,7 @@ function generate(gen_fn::GPT3GF, args::Tuple, constraints::ChoiceMap)
         max_tokens=0,
         echo=true,
         stop=gen_fn.stop,
-        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )

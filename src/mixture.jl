@@ -37,11 +37,12 @@ end
 
 """
     GPT3Mixture(;
-        model = "text-davinci-002",
+        model = "davinci-002",
         temperature = 1.0,
         max_tokens = 1024,
         stop = nothing,
         batch_size = 10,
+        encoding = GenGPT3.MODEL_ENCODINGS[model],
         api_key_lookup = () -> ENV["OPENAI_API_KEY"],
         organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
     )

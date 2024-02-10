@@ -1,8 +1,5 @@
 ## GPT-3 API and utilities ##
 
-"Logit bias to prevent GPT-3 from generating EOT tokens."
-const NO_EOT_BIAS = Dict(string(GPT_EOT_ID) => -100)
-
 "Default batch size for GPT-3 API calls."
 const DEFAULT_BATCH_SIZE = 10
 
@@ -158,11 +155,12 @@ function find_start_index(completion, prompt::String)
 end
 
 "Find the index of a completion's last token, including the stop sequence."
-function find_stop_index(completion, stop::String)
+function find_stop_index(completion, stop::String;
+                         encoding = "cl100k_base")
     if completion.finish_reason == "stop"
         error("Cannot find stop sequence if completion is stopped server-side.")
     end
-    stop_tokens = tokenize(stop, normalized=false)
+    stop_tokens = tokenize(encoding, stop)
     stop_idxs = find_first_subseq(stop_tokens, completion.logprobs.tokens)
     if isnothing(stop_idxs)
         return length(completion.logprobs.tokens)
@@ -172,8 +170,9 @@ function find_stop_index(completion, stop::String)
 end
 
 "Extract tokens and logprobs from completion up to stop sequence."
-function extract_tokens_until_stop(completion, stop::String)
-    stop_idx = find_stop_index(completion, stop)
+function extract_tokens_until_stop(completion, stop::String;
+                                   encoding = "cl100k_base")
+    stop_idx = find_stop_index(completion, stop; encoding)
     tokens = completion.logprobs.tokens[1:stop_idx]
     logprobs = completion.logprobs.token_logprobs[1:stop_idx]
     return tokens, logprobs
@@ -204,17 +203,19 @@ function construct_full_text(
     prompt::String,
     output::String,
     stop::Union{String,Nothing},
-    n_stop_tokens::Int = isnothing(stop) ? 1 : length(tokenize(stop));
+    n_stop_tokens::Int;
+    encoding::String = "cl100k_base",
     return_ids::Bool = true
 )
-    output_ids = id_tokenize(output)
+    output_ids = id_tokenize(encoding, output)
     n_output_tokens = length(output_ids)
     if n_output_tokens + n_stop_tokens <= max_tokens # Finish due to stop words
         # Construct full text from prompt, output, and stop sequence
         if return_ids
             # Convert to token IDs, append <|endoftext|>
-            prompt_ids = id_tokenize(prompt)
-            stop_ids = isnothing(stop) ? GPT_EOT_ID : id_tokenize(stop)
+            prompt_ids = id_tokenize(encoding, prompt)
+            stop_ids = isnothing(stop) ?
+                EOT_IDS[encoding] : id_tokenize(encoding, stop)
             full_text = append!(prompt_ids, output_ids, stop_ids)
         else
             # Append stop sequence to text
@@ -223,7 +224,7 @@ function construct_full_text(
     elseif n_output_tokens == max_tokens # Finish due to length
         if return_ids
             # Convert to token IDs
-            prompt_ids = id_tokenize(prompt)
+            prompt_ids = id_tokenize(encoding, prompt)
             full_text = append!(prompt_ids, output_ids)
         else
             # Construct full text from prompt and output
@@ -236,10 +237,11 @@ function construct_full_text(
 end
 
 "Standardize logit bias input to a Dict{String,Float64}."
-function standardize_logit_bias(logit_bias::Dict, stop=nothing)
+function standardize_logit_bias(logit_bias::Dict, stop=nothing,
+                                encoding::String="cl100k_base")
     new_logit_bias = Dict{String,Float64}()
     if !isnothing(stop) && isempty(logit_bias)
-        new_logit_bias[string(GPT_EOT_ID)] = -100
+        new_logit_bias[string(EOT_IDS[encoding])] = -100
     end
     for (key, value) in logit_bias
         @assert value isa Real
@@ -248,7 +250,7 @@ function standardize_logit_bias(logit_bias::Dict, stop=nothing)
         elseif !isnothing(tryparse(Int, key))
             new_logit_bias[string(parse(Int, key))] = Float64(value)
         elseif key isa String
-            token_ids = id_tokenize(key)
+            token_ids = id_tokenize(encoding, key)
             @assert length(token_ids) == 1 "$key is not a valid token"
             new_logit_bias[string(token_ids[1])] = Float64(value)
         else
@@ -259,9 +261,11 @@ function standardize_logit_bias(logit_bias::Dict, stop=nothing)
 end
 
 # If a stop token is specified, we ban <|endoftext|> from being generated
-standardize_logit_bias(logit_bias::Nothing, stop) = NO_EOT_BIAS
+standardize_logit_bias(logit_bias::Nothing, stop, encoding = "cl100k_base") =
+    Dict(string(EOT_IDS[encoding]) => -100)
 
-standardize_logit_bias(logit_bias::Nothing, stop::Nothing) = logit_bias
+standardize_logit_bias(logit_bias::Nothing, stop::Nothing, encoding = "cl100k_base") = 
+    logit_bias
 
 "Call the OpenAI JSON API for text embeddings and return the results."
 function embeddings_api_call(

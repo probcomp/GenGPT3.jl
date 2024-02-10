@@ -4,7 +4,7 @@ end
 
 @testset "GPT3Mixture" begin
 
-    gpt3_mixture = GPT3Mixture(model="text-babbage-001", max_tokens=64)
+    gpt3_mixture = GPT3Mixture(model="davinci-002", max_tokens=64, stop="\n")
 
     @testset "trace" begin
         prompts = ["What is the tallest mountain on Mars?",
@@ -34,7 +34,8 @@ end
 
         @test trace.prompts == prompts
         @test trace.probs == probs
-        @test trace.output == join(trace.tokens[1:end-1])
+        @test trace.output == (trace.tokens[end] == "\n" ? 
+            join(trace.tokens[1:end-1]) : join(trace.tokens))
         @test trace.score == logsumexp(trace.scores .+ log.(probs))
         @test trace.gen_fn == gpt3_mixture
     end
@@ -48,7 +49,8 @@ end
 
         @test trace.prompts == prompts
         @test trace.probs == probs
-        @test trace.output == join(trace.tokens[1:end-1])
+        @test trace.output == (trace.tokens[end] == "\n" ? 
+            join(trace.tokens[1:end-1]) : join(trace.tokens))
         @test trace.score == logsumexp(trace.scores .+ log.(probs))
         @test weight == 0.0
 

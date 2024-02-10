@@ -71,11 +71,12 @@ end
 
 """
     MultiGPT3GenerativeFunction(;
-        model = "text-davinci-002",
+        model = "davinci-002",
         temperature = 1.0,
         max_tokens = 1024,
         stop = nothing,
         batch_size = 10,
+        encoding = GenGPT3.MODEL_ENCODINGS[model],
         api_key_lookup = () -> ENV["OPENAI_API_KEY"],
         organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
     )
@@ -86,11 +87,12 @@ valued prompts as an argument. The completion for the `i`th prompt is stored
 in the `i => $OUTPUT_ADDR` address of the resulting trace.
 """
 @kwdef struct MultiGPT3GenerativeFunction <: GenerativeFunction{String,MultiGPT3Trace}
-    model::String = "text-davinci-002"
+    model::String = "davinci-002"
     temperature::Float64 = 1.0
     max_tokens::Int = 1024
+    encoding::String = MODEL_ENCODINGS[model]
     stop::Union{String,Nothing} = nothing
-    n_stop::Int = isnothing(stop) ? 1 : length(tokenize(stop))
+    n_stop::Int = isnothing(stop) ? 1 : length(tokenize(encoding, stop))
     batch_size::Int = DEFAULT_BATCH_SIZE
     api_key_lookup::Function = lookup_openai_api_key
     organization_lookup::Function = lookup_openai_organization
@@ -120,7 +122,7 @@ function (gen_fn::MultiGPT3GenerativeFunction)(prompts::Vector{String})
         temperature=gen_fn.temperature,
         max_tokens=gen_fn.max_tokens,
         stop=gen_fn.stop,
-        logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+        logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
         api_key=gen_fn.api_key_lookup(),
         organization=gen_fn.organization_lookup()
     )
@@ -141,14 +143,14 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
 
     # Decide whether to sample and score in the same API call
     if all(p === prompts[1] for p in prompts)
-        n_prompt_tokens = length(tokenize(prompts[1]))
+        n_prompt_tokens = length(tokenize(gen_fn.encoding, prompts[1]))
         same_call = n_prompt_tokens > gen_fn.max_tokens && !isnothing(gen_fn.stop)
     else
         same_call = false
     end
     stop = same_call ? nothing : gen_fn.stop
     logit_bias = same_call ?
-        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop)
+        NO_EOT_BIAS : standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding)
 
     # Request completions through GPT-3 API
     choices = gpt3_multi_prompt_api_call(
@@ -179,7 +181,8 @@ function simulate(gen_fn::MultiGPT3GF, args::Tuple{Vector{String}})
     logprobs = Vector{Vector{Float64}}(undef, n)
     scores = Vector{Float64}(undef, n)
     for (i, completion) in enumerate(choices)
-        tokens[i], lps = extract_tokens_until_stop(completion, gen_fn.stop)
+        tokens[i], lps = extract_tokens_until_stop(completion, gen_fn.stop;
+                                                   encoding=gen_fn.encoding)
         logprobs[i] = gen_fn.temperature == 0.0 ?
             zeros(Float64, length(tokens)) : lps ./ gen_fn.temperature
         scores[i] = isempty(logprobs[i]) ? 0.0 : sum(logprobs[i])
@@ -222,7 +225,8 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
         outputs[i] = constraints[addr]
         full_text = construct_full_text(gen_fn.max_tokens,
                                         prompts[i], outputs[i],
-                                        gen_fn.stop, gen_fn.n_stop)
+                                        gen_fn.stop, gen_fn.n_stop;
+                                        encoding=gen_fn.encoding)
         # If nothing is returned, then the constrained output is too long
         if isnothing(full_text)
             scores[i] = -Inf
@@ -244,7 +248,7 @@ function generate(gen_fn::MultiGPT3GF, args::Tuple, constraints::ChoiceMap)
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )
@@ -338,7 +342,8 @@ function update(trace::MultiGPT3Trace, args::Tuple,
         end
         full_text = construct_full_text(gen_fn.max_tokens,
                                         new_prompts[i], outputs[i],
-                                        gen_fn.stop, gen_fn.n_stop)
+                                        gen_fn.stop, gen_fn.n_stop;
+                                        encoding=gen_fn.encoding)
         # If nothing is returned, then the constrained output is too long
         if isnothing(full_text)
             scores[i] = -Inf
@@ -360,7 +365,7 @@ function update(trace::MultiGPT3Trace, args::Tuple,
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )
@@ -441,7 +446,8 @@ function regenerate(trace::MultiGPT3Trace, args::Tuple,
         end
         full_text = construct_full_text(gen_fn.max_tokens,
                                         new_prompts[i], outputs[i],
-                                        gen_fn.stop, gen_fn.n_stop)
+                                        gen_fn.stop, gen_fn.n_stop;
+                                        encoding=gen_fn.encoding)
         push!(full_texts, full_text)
         push!(updated_idxs, i) 
     end
@@ -457,7 +463,7 @@ function regenerate(trace::MultiGPT3Trace, args::Tuple,
             max_tokens=0,
             echo=true,
             stop=gen_fn.stop,
-            logit_bias=standardize_logit_bias(nothing, gen_fn.stop),
+            logit_bias=standardize_logit_bias(nothing, gen_fn.stop, gen_fn.encoding),
             api_key=gen_fn.api_key_lookup(),
             organization=gen_fn.organization_lookup()
         )

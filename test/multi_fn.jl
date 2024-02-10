@@ -4,12 +4,12 @@ end
 
 @testset "MultiGPT3GenerativeFunction" begin
 
-    multi_gpt3 = MultiGPT3GF(model="text-babbage-001", max_tokens=64)
+    multi_gpt3 = MultiGPT3GF(model="davinci-002", max_tokens=64, stop="\n")
 
     @testset "trace" begin
         prompts = fill("What is the tallest mountain on Mars?", 2)
         outputs = fill("\n\nThe tallest mountain on Mars is Olympus Mons.", 2)
-        scores = fill(-5.61428454404, 2)
+        scores = fill(-27.153727656999997, 2)
         score = sum(scores)
         trace = MultiGPT3Trace(multi_gpt3, prompts, outputs,
                                Vector{String}[], Vector{Float64}[],
@@ -29,14 +29,16 @@ end
         trace = simulate(multi_gpt3, (prompts,))
 
         @test trace.prompts == prompts
-        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.outputs == [tks[end] == "\n" ? join(tks[1:end-1]) : join(tks)
+                                for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
 
         trace = simulate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
-        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.outputs == [tks[end] == "\n" ? join(tks[1:end-1]) : join(tks)
+                                for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
@@ -48,7 +50,8 @@ end
         trace, weight = generate(multi_gpt3, (prompts,))
 
         @test trace.prompts == prompts
-        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.outputs == [tks[end] == "\n" ? join(tks[1:end-1]) : join(tks)
+                                for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)
@@ -56,7 +59,8 @@ end
 
         trace, weight = generate(multi_gpt3, (2, prompts[1]))
         @test trace.prompts == prompts
-        @test trace.outputs == [join(tks[1:end-1]) for tks in trace.tokens]
+        @test trace.outputs == [tks[end] == "\n" ? join(tks[1:end-1]) : join(tks)
+                                for tks in trace.tokens]
         @test trace.scores == [sum(logprobs) for logprobs in trace.logprobs]
         @test all(length.(trace.tokens) .== length.(trace.logprobs))
         @test trace.score == sum(trace.scores)

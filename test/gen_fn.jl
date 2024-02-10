@@ -4,12 +4,12 @@ end
 
 @testset "GPT3GenerativeFunction" begin
 
-    gpt3 = GPT3GF(model="text-babbage-001", max_tokens=64)
+    gpt3 = GPT3GF(model="davinci-002", max_tokens=64, stop="\n")
 
     @testset "trace" begin
         prompt = "What is the tallest mountain on Mars?"
         output = "\n\nThe tallest mountain on Mars is Olympus Mons."
-        score = -5.61428454404
+        score = -27.153727656999997
         trace = GPT3Trace(gpt3, prompt, output, String[], Float64[], score)
 
         @test get_choices(trace) == GPT3ChoiceMap(output)
@@ -24,7 +24,8 @@ end
         trace = simulate(gpt3, (prompt,))
 
         @test trace.prompt == prompt
-        @test trace.output == join(trace.tokens[1:end-1])
+        @test trace.output == (trace.tokens[end] == "\n" ? 
+            join(trace.tokens[1:end-1]) : join(trace.tokens))
         @test trace.score == sum(trace.logprobs)
         @test length(trace.tokens) == length(trace.logprobs)
     end
@@ -35,7 +36,8 @@ end
         trace, weight = generate(gpt3, (prompt,))
 
         @test trace.prompt == prompt
-        @test trace.output == join(trace.tokens[1:end-1])
+        @test trace.output == (trace.tokens[end] == "\n" ? 
+            join(trace.tokens[1:end-1]) : join(trace.tokens))
         @test trace.score == sum(trace.logprobs)
         @test length(trace.tokens) == length(trace.logprobs)
         @test weight == 0.0
