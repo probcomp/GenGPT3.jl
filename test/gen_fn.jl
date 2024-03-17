@@ -9,14 +9,22 @@ end
     @testset "trace" begin
         prompt = "What is the tallest mountain on Mars?"
         output = "\n\nThe tallest mountain on Mars is Olympus Mons."
+        tokens = GenGPT3.tokenize(gpt3.encoding, output)
+        logprobs = fill(0.0, length(tokens)) ./ length(tokens)
         score = -27.153727656999997
-        trace = GPT3Trace(gpt3, prompt, output, String[], Float64[], score)
+        trace = GPT3Trace(gpt3, prompt, output, tokens, logprobs, score)
 
         @test get_choices(trace) == GPT3ChoiceMap(output)
         @test get_args(trace) == (prompt,)
         @test get_retval(trace) == output
         @test get_score(trace) == score
         @test get_gen_fn(trace) == gpt3
+
+        @test trace[:prompt] == prompt
+        @test trace[:output] == output
+        @test trace[:tokens] == tokens
+        @test trace[:token_logprobs] == logprobs
+        @test trace[:score] == score
     end
 
     @testset "simulate" begin

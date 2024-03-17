@@ -24,6 +24,15 @@ end
         @test get_retval(trace) == output
         @test get_score(trace) == score
         @test get_gen_fn(trace) == gpt3_mixture
+
+        @test trace[:prompts] == prompts
+        @test trace[:prior_probs] == probs
+        @test trace[:post_probs] == exp.(scores .+ log.(probs) .- score)
+        @test trace[:joint_probs] == exp.(scores .+ log.(probs))
+        @test trace[:tokens] == tokens
+        @test trace[:output] == output
+        @test trace[:output_scores] == scores
+        @test trace[:score] == score
     end
 
     @testset "simulate" begin

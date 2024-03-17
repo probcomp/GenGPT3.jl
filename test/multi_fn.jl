@@ -9,19 +9,35 @@ end
     @testset "trace" begin
         prompts = fill("What is the tallest mountain on Mars?", 2)
         outputs = fill("\n\nThe tallest mountain on Mars is Olympus Mons.", 2)
+        tokens = [GenGPT3.tokenize(multi_gpt3.encoding, o) for o in outputs]
+        logprobs = [fill(0.0, length(t)) for t in tokens]
         scores = fill(-27.153727656999997, 2)
         score = sum(scores)
         trace = MultiGPT3Trace(multi_gpt3, prompts, outputs,
-                               Vector{String}[], Vector{Float64}[],
-                               scores, score)
+                               tokens, logprobs, scores, score)
 
         @test get_args(trace) == (prompts,)
         @test get_retval(trace) == outputs
         @test get_score(trace) == score
         @test get_gen_fn(trace) == multi_gpt3
 
+        @test trace[:prompts] == prompts
+        @test trace[:outputs] == outputs
+        @test trace[:tokens] == tokens
+        @test trace[:token_logprobs] == logprobs
+        @test trace[:output_scores] == scores
+        @test trace[:score] == score
+
+        @test trace[1 => :prompt] == prompts[1]
         @test trace[1 => :output] == outputs[1]
+        @test trace[1 => :tokens] == tokens[1]
+        @test trace[1 => :token_logprobs] == logprobs[1]
+        @test trace[1 => :score] == scores[1]
+        @test trace[2 => :prompt] == prompts[2]
         @test trace[2 => :output] == outputs[2]
+        @test trace[2 => :tokens] == tokens[2]
+        @test trace[2 => :token_logprobs] == logprobs[2]
+        @test trace[2 => :score] == scores[2]
     end
 
     @testset "simulate" begin
