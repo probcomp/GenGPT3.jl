@@ -77,20 +77,20 @@ The generative function takes in a prompt as an (optional) argument, then sample
 Utilities for converting between strings and tokens are also included as part of this package (using functionality provided by [BytePairEncoding.jl](https://github.com/chengchingwen/BytePairEncoding.jl`) and [TextEncodeBase.jl](https://github.com/chengchingwen/TextEncodeBase.jl)):
 
 ```julia-repl
-julia> tokens = GenGPT3.tokenize("What is the tallest mountain on Mars?")
-["What", "Ġis", "Ġthe", "Ġtallest", "Ġmountain", "Ġon", "ĠMars", "?"]
+julia> tokens = GenGPT3.tokenize("cl100k_base", "What is the tallest mountain on Mars?")
+["What", " is", " the", " tallest", " mountain", " on", " Mars", "?"]
 
-julia> ids = GenGPT3.encode(tokens)
-[2061, 318, 262, 38760, 8598, 319, 8706, 30]
+julia> ids = GenGPT3.encode("cl100k_base", tokens)
+[3923, 374, 279, 82717, 16700, 389, 21725, 30]
 
-julia> text = GenGPT3.id_detokenize(ids)
+julia> text = GenGPT3.id_detokenize("cl100k_base", ids)
 "What is the tallest mountain on Mars?"
 
-julia> ids = GenGPT3.id_tokenize(text)
-[2061, 318, 262, 38760, 8598, 319, 8706, 30]
+julia> ids = GenGPT3.id_tokenize("cl100k_base", text)
+[3923, 374, 279, 82717, 16700, 389, 21725, 30]
 
-julia> tokens = GenGPT3.decode(ids)
-["What", "Ġis", "Ġthe", "Ġtallest", "Ġmountain", "Ġon", "ĠMars", "?"]
+julia> tokens = GenGPT3.decode("cl100k_base", ids)
+["What", " is", " the", " tallest", " mountain", " on", " Mars", "?"]
 ```
 
 Support for calling the OpenAI Embeddings API is also provided:
