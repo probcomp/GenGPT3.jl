@@ -19,7 +19,7 @@ Now you can construct GPT-3 as a generative function, and call GFI functions on 
 using Gen, GenGPT3
 
 # Construct GPT3GenerativeFunction
-gpt3 = GPT3GF(model="text-davinci-002", max_tokens=256)
+gpt3 = GPT3GF(model="davinci-002", max_tokens=256)
 
 # Untraced execution 
 prompt = "What is the tallest mountain on Mars?"
@@ -39,10 +39,11 @@ The constructor for a `GPT3GenerativeFunction` (or `GPT3GF` for short), can be u
 
 ```julia
 GPT3GenerativeFunction(;
-    model = "text-davinci-002",
+    model = "davinci-002",
     temperature = 1.0,
     max_tokens = 1024,
     stop = nothing,
+    encoding = GenGPT3.MODEL_ENCODINGS[model],
     api_key_lookup = () -> ENV["OPENAI_API_KEY"],
     organization_lookup = () -> ENV["OPENAI_ORGANIZATION"]
 )
@@ -54,13 +55,15 @@ The generative function takes in a prompt as an (optional) argument, then sample
 
 ### Arguments
 - `model::String`:
-    The pretrained model to query. Defaults to `"text-davinci-002"`.
+    The pretrained model to query. Defaults to `"davinci-002"`.
 - `temperature::Float64 = 1.0`:
     The softmax temperature. Values between `0.0` and `2.0` are allowed.
     Higher temperatures increase randomness. Note that if this is not set
     to `1.0`, then the resulting log probabilities will no longer be normalized.
 - `max_tokens::Int = 1024`:
     The maximum number of output tokens generated (including the stop sequence).
+- `encoding::String = GenGPT3.MODEL_ENCODINGS[model]`:
+    Tokenizer encoding for the model. For most models, this is `"cl100k_base"`.
 - `stop::Union{String,Nothing} = nothing`:
     The stop sequence as a string. Defaults to the `<|endoftext|>` token if not
     specified. If specified, then the model will be prevented from generating

@@ -103,7 +103,7 @@ stored in the `$OUTPUT_ADDR` address of the resulting trace.
     to `1.0`, then the resulting log probabilities will no longer be normalized.
 - `max_tokens::Int = 1024`:
     The maximum number of output tokens generated (including the stop sequence).
-- `encoding::String = GenGPT.MODEL_ENCODINGS[model]`:
+- `encoding::String = GenGPT3.MODEL_ENCODINGS[model]`:
     Tokenizer encoding for the model. For most models, this is `"cl100k_base"`.
 - `stop::Union{String,Nothing} = nothing`:
     The stop sequence as a string. Defaults to the `<|endoftext|>` token if not
