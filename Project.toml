@@ -1,7 +1,7 @@
 name = "GenGPT3"
 uuid = "bf5e1513-8b89-42fc-a2bc-387c809df403"
 authors = ["Xuan <tanqazx@gmail.com> and contributors"]
-version = "0.2.0"
+version = "0.2.1"
 
 [deps]
 BytePairEncoding = "a4280ba5-8788-555a-8ca8-4a8c3d966a71"
