@@ -75,6 +75,13 @@ The generative function takes in a prompt as an (optional) argument, then sample
     A zero-argument function that returns the OpenAI organization ID to use.
     Defaults to the `"OPENAI_ORGANIZATION"` environment variable, if specified.
 
+### Variants
+
+GenGPT3.jl also provides support for batched LLM calls with [`MultiGPT3GF`](src/multi_fn.jl) and a "mixture-of-prompts" generative function called [`GPT3Mixture`](src/mixture.jl). `MultiGPT3GF` reduces the latency of making multiple API calls, and `GPT3Mixture` (which uses `MultiGPT3GF` under the hood) can be used to marginalize over uncertainty about the prompt.
+
+Support for batched importance sampling of LLM generations is provided by [`GPT3ImportanceSampler`](src/importance.jl), which can be configured to have 
+separate model and proposal LLM generative functions.
+
 ## Utilities
 
 Utilities for converting between strings and tokens are also included as part of this package (using functionality provided by [BytePairEncoding.jl](https://github.com/chengchingwen/BytePairEncoding.jl`) and [TextEncodeBase.jl](https://github.com/chengchingwen/TextEncodeBase.jl)):
