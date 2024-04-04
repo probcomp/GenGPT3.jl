@@ -84,7 +84,7 @@ separate model and proposal LLM generative functions.
 
 ## Utilities
 
-Utilities for converting between strings and tokens are also included as part of this package (using functionality provided by [BytePairEncoding.jl](https://github.com/chengchingwen/BytePairEncoding.jl`) and [TextEncodeBase.jl](https://github.com/chengchingwen/TextEncodeBase.jl)):
+Utilities for converting between strings and tokens are also included as part of this package (using functionality provided by [BytePairEncoding.jl](https://github.com/chengchingwen/BytePairEncoding.jl) and [TextEncodeBase.jl](https://github.com/chengchingwen/TextEncodeBase.jl)):
 
 ```julia-repl
 julia> tokens = GenGPT3.tokenize("cl100k_base", "What is the tallest mountain on Mars?")
