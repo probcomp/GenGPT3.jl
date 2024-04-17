@@ -8,7 +8,7 @@ Install both Gen and this package via the Julia Pkg REPL:
 
 ```
 add Gen
-add https://github.com/probcomp/GenGPT3.jl.git
+add GenGPT3
 ```
 
 Add your OpenAI API key as an environment variable named `OPENAI_API_KEY`. You can follow [this guide](https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety), or set `ENV["OPENAI_API_KEY"]` to the value of your API key in the Julia REPL.
