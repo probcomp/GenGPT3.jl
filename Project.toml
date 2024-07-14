@@ -14,13 +14,13 @@ TextEncodeBase = "f92c20c0-9f2a-4705-8116-881385faba05"
 TypedTables = "9d95f2ec-7b3d-5a63-8d20-e2491e220bb9"
 
 [compat]
-BytePairEncoding = "0.5"
+BytePairEncoding = "0.5.2"
 Gen = "0.4"
 HTTP = "1"
 JSON3 = "1"
 JSONTables = "1"
 Tables = "1.7"
-TextEncodeBase = "0.8"
+TextEncodeBase = "0.8.3"
 TypedTables = "1.4"
 julia = "1.6"
 
